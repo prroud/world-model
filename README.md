@@ -71,3 +71,14 @@ for validation, and writes the best checkpoint to `artifacts/vae/vae.pt`. It
 also writes `reconstructions.png`, with each original frame next to its
 deterministic reconstruction, for visual inspection. Use `--device cpu` or
 `--device cuda` to choose the compute device explicitly.
+
+## Encoding latent sequences
+
+After training the VAE, encode the dataset using its posterior means:
+
+```powershell
+python scripts/encode_latents.py --data data/carracing --checkpoint artifacts/vae/vae.pt --output data/latents
+```
+
+This deterministic encoding step writes one file per source episode, preserving
+the matching actions and episode-boundary flags for recurrent-model training.

@@ -15,6 +15,13 @@ and a recurrent MDN-RNN dynamics model.
 Manual latent-space editing and long, stable sequences are outside the scope of
 the minimum viable demo.
 
+## VAE model
+
+The convolutional VAE implementation is in `src/world_model/vae.py`. It accepts
+normalized RGB tensors in NCHW layout with shape `B×3×64×64`, and returns a
+reconstruction plus the latent Gaussian mean and log variance. Use
+`sample=False` to decode the posterior mean deterministically.
+
 ## Requirements
 
 - Python 3.10 or newer

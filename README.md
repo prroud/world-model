@@ -1,26 +1,26 @@
 # World Model Demo
 
-Demonstrator modelu świata dla środowiska `CarRacing-v3` z Gymnasium. Celem jest
-interaktywne generowanie krótkich sekwencji obrazu na podstawie sterowania,
-z użyciem VAE i rekurencyjnego modelu dynamiki MDN-RNN.
+A world model demonstrator for Gymnasium's `CarRacing-v3` environment. The goal
+is to generate short, interactive image sequences from user controls using a VAE
+and a recurrent MDN-RNN dynamics model.
 
-## Zakres pierwszej wersji
+## Initial scope
 
-- zbieranie klatek 64×64 wraz z akcjami i granicami epizodów,
-- VAE kodujący klatki do wektorów latentnych o wymiarze 32,
-- MDN-RNN przewidujący następny stan latentny,
-- proste demo webowe ze sterowaniem, resetem i temperaturą,
-- diagnostyczne porównanie z Gymnasium oraz pomiar wydajności.
+- collect 64×64 frames with actions and episode boundaries,
+- train a VAE that encodes frames into 32-dimensional latent vectors,
+- train an MDN-RNN to predict the next latent state,
+- provide a simple web demo with controls, reset, and temperature adjustment,
+- compare against Gymnasium diagnostically and measure inference performance.
 
-Ręczna edycja przestrzeni latentnej i długie, stabilne sekwencje są poza zakresem
-minimalnej wersji.
+Manual latent-space editing and long, stable sequences are outside the scope of
+the minimum viable demo.
 
-## Wymagania
+## Requirements
 
-- Python 3.10 lub nowszy
-- Zależności projektu zainstalowane przez `pip install -e .`
+- Python 3.10 or newer
+- Install project dependencies with `pip install -e .`
 
-## Struktura
+## Project layout
 
-Kod pakietu znajduje się w `src/world_model/`, a skrypty uruchomieniowe w
-`scripts/`. Dane i wytrenowane wagi nie są częścią repozytorium.
+Package code lives in `src/world_model/`, with runnable scripts in `scripts/`.
+Datasets and trained weights are not stored in the repository.

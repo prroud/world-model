@@ -22,6 +22,15 @@ normalized RGB tensors in NCHW layout with shape `B×3×64×64`, and returns a
 reconstruction plus the latent Gaussian mean and log variance. Use
 `sample=False` to decode the posterior mean deterministically.
 
+## MDN-RNN model
+
+The recurrent dynamics model is in `src/world_model/mdn_rnn.py`. It consumes
+batch-first latent and action sequences, maintains the LSTM hidden and cell
+states, and predicts a five-component Gaussian mixture for the next latent
+vector. `step()` advances a single frame; its temperature parameter controls
+mixture selection and sampling variance, with temperature zero selecting the
+most likely component mean.
+
 ## Requirements
 
 - Python 3.10 or newer

@@ -48,3 +48,17 @@ The output directory must not already contain files named `episode_*.npz`.
 
 Use `--render` to display the environment while collecting. This is slower, but
 useful for visually checking the exploratory driving behavior.
+
+## Training the VAE
+
+Train on the collected episode files with:
+
+```powershell
+python scripts/train_vae.py --data data/carracing --epochs 20
+```
+
+The trainer keeps one episode in memory at a time, reserves complete episodes
+for validation, and writes the best checkpoint to `artifacts/vae/vae.pt`. It
+also writes `reconstructions.png`, with each original frame next to its
+deterministic reconstruction, for visual inspection. Use `--device cpu` or
+`--device cuda` to choose the compute device explicitly.

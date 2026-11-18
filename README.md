@@ -95,3 +95,20 @@ Training uses non-overlapping 64-step windows within each episode, so no
 sequence crosses an episode boundary. The best checkpoint is written to
 `artifacts/mdn_rnn/mdn_rnn.pt`, and per-epoch negative log likelihood values are
 stored in `history.csv`.
+
+## Running the world engine
+
+`src/world_model/engine.py` combines the trained checkpoints for inference. It
+uses an encoded episode as a reset seed, then generates frames from actions
+without stepping Gymnasium:
+
+```python
+from world_model.engine import WorldEngine
+
+engine = WorldEngine()
+frame = engine.reset(seed=7)
+frame = engine.step([0.0, 0.8, 0.0])  # steering, gas, brake
+```
+
+`frame` is an RGB `uint8` array of shape `64×64×3`. Call
+`engine.set_temperature(value)` to adjust sampling while the dream is running.

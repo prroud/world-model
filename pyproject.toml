@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "world-model-demo"
+version = "0.1.0"
+description = "Interaktywny demonstrator modelu świata dla Gymnasium CarRacing-v3"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium[box2d]>=1.0,<2.0",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "torch>=2.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -82,3 +82,16 @@ python scripts/encode_latents.py --data data/carracing --checkpoint artifacts/va
 
 This deterministic encoding step writes one file per source episode, preserving
 the matching actions and episode-boundary flags for recurrent-model training.
+
+## Training the MDN-RNN
+
+Train the recurrent dynamics model on those latent episodes:
+
+```powershell
+python scripts/train_mdn_rnn.py --data data/latents --epochs 30
+```
+
+Training uses non-overlapping 64-step windows within each episode, so no
+sequence crosses an episode boundary. The best checkpoint is written to
+`artifacts/mdn_rnn/mdn_rnn.pt`, and per-epoch negative log likelihood values are
+stored in `history.csv`.

@@ -6,6 +6,7 @@ from typing import NamedTuple
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 class MDNOutput(NamedTuple):
@@ -134,3 +135,24 @@ class MDNRNN(nn.Module):
             raise ValueError(f"action must have shape (batch, {self.action_dim})")
         output = self(latent[:, None, :], action[:, None, :], hidden)
         return self.sample_next(output, temperature), output.hidden
+
+
+def mixture_nll(
+    output: MDNOutput, targets: torch.Tensor
+) -> torch.Tensor:
+    """Compute mean negative log likelihood for next-latent targets.
+
+    ``targets`` has shape ``(batch, time, latent_dim)`` and is scored under
+    the diagonal Gaussian mixture emitted at each corresponding timestep.
+    """
+    if targets.ndim != 3 or targets.shape != output.means.shape[:2] + (output.means.shape[-1],):
+        raise ValueError("targets must match the output batch, time, and latent dimensions")
+    log_stds = output.log_stds
+    standardized = (targets.unsqueeze(2) - output.means) * torch.exp(-log_stds)
+    log_prob_per_dim = -0.5 * standardized.square() - log_stds - 0.5 * torch.log(
+        targets.new_tensor(2.0 * torch.pi)
+    )
+    component_log_prob = log_prob_per_dim.sum(dim=-1)
+    log_mixture_weights = F.log_softmax(output.mixture_logits, dim=-1)
+    log_prob = torch.logsumexp(log_mixture_weights + component_log_prob, dim=-1)
+    return -log_prob.mean()

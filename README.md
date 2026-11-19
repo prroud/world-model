@@ -127,3 +127,6 @@ Connect to `ws://127.0.0.1:8000/ws/dream`. Send JSON messages with type
 `temperature` (a numeric `value`). Frame responses contain a Base64 PNG in
 `image`, the current 32-value `latent`, and the active `temperature`. The
 `/health` endpoint reports API process health; it does not verify model files.
+Open `http://127.0.0.1:8000/` for the browser demo. Use the arrow keys or WASD
+to steer, accelerate, and brake; the side panel shows temperature, generated
+frame rate, and a read-only chart of the current latent vector.

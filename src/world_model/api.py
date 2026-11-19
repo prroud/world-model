@@ -6,9 +6,12 @@ import base64
 import io
 import json
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from world_model.engine import WorldEngine
@@ -27,6 +30,11 @@ def encode_frame(frame: np.ndarray) -> str:
 def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
     """Create the API application, with a separate engine per WebSocket client."""
     app = FastAPI(title="World Model Demo API", version="0.1.0")
+    static_dir = Path(__file__).parent / "static"
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(static_dir / "index.html")
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -87,6 +95,7 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
         except WebSocketDisconnect:
             pass
 
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
     return app
 
 

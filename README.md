@@ -112,3 +112,18 @@ frame = engine.step([0.0, 0.8, 0.0])  # steering, gas, brake
 
 `frame` is an RGB `uint8` array of shape `64×64×3`. Call
 `engine.set_temperature(value)` to adjust sampling while the dream is running.
+
+## WebSocket API
+
+Run the API after producing both model checkpoints and latent seed episodes:
+
+```powershell
+uvicorn world_model.api:app --app-dir src --host 127.0.0.1 --port 8000
+```
+
+Connect to `ws://127.0.0.1:8000/ws/dream`. Send JSON messages with type
+`reset` (optional `seed`, `episode_index`, and `frame_index`), `action` (an
+`action` array in steering/gas/brake order, optionally with `temperature`), or
+`temperature` (a numeric `value`). Frame responses contain a Base64 PNG in
+`image`, the current 32-value `latent`, and the active `temperature`. The
+`/health` endpoint reports API process health; it does not verify model files.

@@ -2,8 +2,12 @@ const socketUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${locatio
 const connectionDot = document.querySelector('#connection-dot');
 const connectionLabel = document.querySelector('#connection-label');
 const frameElement = document.querySelector('#dream-frame');
+const referenceElement = document.querySelector('#reference-frame');
+const referenceView = document.querySelector('#reference-view');
+const screenWrap = document.querySelector('#screen-wrap');
 const placeholder = document.querySelector('#screen-placeholder');
 const resetButton = document.querySelector('#reset-button');
+const compareButton = document.querySelector('#compare-button');
 const temperatureSlider = document.querySelector('#temperature');
 const temperatureValue = document.querySelector('#temperature-value');
 const fpsValue = document.querySelector('#fps-value');
@@ -21,12 +25,14 @@ let frameCount = 0;
 let previousFrameTime = 0;
 let fpsSamples = [];
 let currentLatent = [];
+let comparisonEnabled = false;
 
 function setConnection(state, label) {
   connectionDot.classList.toggle('connected', state === 'connected');
   connectionDot.classList.toggle('error', state === 'error');
   connectionLabel.textContent = label;
   resetButton.disabled = state !== 'connected';
+  compareButton.disabled = state !== 'connected';
 }
 
 function connect() {
@@ -51,6 +57,7 @@ function connect() {
         currentLatent = message.latent;
         drawLatent(currentLatent);
       }
+      if (message.reference_image) showReferenceFrame(message.reference_image);
       const now = performance.now();
       if (previousFrameTime > 0) {
         fpsSamples.push(1000 / (now - previousFrameTime));
@@ -61,8 +68,19 @@ function connect() {
       modelState.textContent = 'Dreaming';
     } else if (message.type === 'temperature') {
       temperatureValue.textContent = Number(message.value).toFixed(2);
+    } else if (message.type === 'comparison') {
+      comparisonEnabled = message.enabled;
+      compareButton.disabled = false;
+      compareButton.classList.toggle('active', comparisonEnabled);
+      compareButton.innerHTML = comparisonEnabled
+        ? '<span aria-hidden="true">⇄</span> Hide comparison'
+        : '<span aria-hidden="true">⇄</span> Compare Gymnasium';
+      screenWrap.classList.toggle('compare-mode', comparisonEnabled);
+      referenceView.hidden = !comparisonEnabled;
+      if (message.reference_image) showReferenceFrame(message.reference_image);
     } else if (message.type === 'error') {
       actionPending = false;
+      compareButton.disabled = socket?.readyState !== WebSocket.OPEN;
       modelState.textContent = 'Error';
       placeholder.querySelector('span').textContent = message.message;
       placeholder.classList.remove('hidden');
@@ -73,6 +91,9 @@ function connect() {
     setConnection('error', 'Disconnected');
     hasReset = false;
     actionPending = false;
+    comparisonEnabled = false;
+    screenWrap.classList.remove('compare-mode');
+    referenceView.hidden = true;
     modelState.textContent = 'Offline';
   });
   socket.addEventListener('error', () => setConnection('error', 'Connection error'));
@@ -90,6 +111,17 @@ function resetDream() {
   placeholder.querySelector('span').textContent = 'Loading a real seed frame';
   placeholder.classList.remove('hidden');
   send({ type: 'reset' });
+}
+
+function showReferenceFrame(image) {
+  referenceElement.src = `data:image/png;base64,${image}`;
+  referenceElement.classList.add('visible');
+}
+
+function toggleComparison() {
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  compareButton.disabled = true;
+  send({ type: 'compare', enabled: !comparisonEnabled });
 }
 
 function currentAction() {
@@ -151,6 +183,7 @@ temperatureSlider.addEventListener('input', () => {
   send({ type: 'temperature', value: Number(temperatureSlider.value) });
 });
 resetButton.addEventListener('click', resetDream);
+compareButton.addEventListener('click', toggleComparison);
 
 setInterval(() => {
   if (!hasReset || actionPending || socket?.readyState !== WebSocket.OPEN) return;

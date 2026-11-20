@@ -23,9 +23,14 @@
           <h1>Dream <span>Drive</span></h1>
           <p class="lede">Steer through a world imagined one frame at a time.</p>
         </div>
-        <button id="reset-button" class="button button-secondary" disabled>
-          <span aria-hidden="true">↻</span> Reset dream
-        </button>
+        <div class="intro-actions">
+          <button id="compare-button" class="button button-secondary" disabled>
+            <span aria-hidden="true">⇄</span> Compare Gymnasium
+          </button>
+          <button id="reset-button" class="button button-secondary" disabled>
+            <span aria-hidden="true">↻</span> Reset dream
+          </button>
+        </div>
       </section>
 
       <section class="workspace" aria-label="Dream driving workspace">
@@ -34,8 +39,15 @@
             <div><span class="live-dot"></span><span>GENERATED FRAME</span></div>
             <span class="resolution">64 × 64 RGB</span>
           </div>
-          <div class="screen-wrap">
-            <img id="dream-frame" alt="Neural world model generated racing frame" />
+          <div id="screen-wrap" class="screen-wrap">
+            <div class="frame-view">
+              <div class="frame-label">WORLD MODEL <span>generated</span></div>
+              <img id="dream-frame" alt="Neural world model generated racing frame" />
+            </div>
+            <div id="reference-view" class="frame-view reference-view" hidden>
+              <div class="frame-label">GYMNASIUM <span>independent start</span></div>
+              <img id="reference-frame" alt="CarRacing-v3 reference frame" />
+            </div>
             <div id="screen-placeholder" class="screen-placeholder">
               <div class="loader"></div>
               <span>Waiting for the dream to start</span>

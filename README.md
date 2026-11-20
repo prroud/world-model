@@ -122,6 +122,17 @@ python scripts/benchmark_engine.py --steps 500 --json-out artifacts/benchmark.js
 The benchmark includes recurrent prediction, VAE decoding, and conversion to an
 RGB image. It reports mean, median, p95, and p99 latency plus average FPS.
 
+Inspect open-loop quality against a recorded episode with:
+
+```powershell
+python scripts/evaluate_rollout.py --episode-index 0 --horizon 100 --temperature 0
+```
+
+The script feeds the episode's recorded actions to the MDN-RNN from a recorded
+latent seed, then writes a real-versus-dream contact sheet and per-step pixel
+MAE values under `artifacts/rollout/`. This visual diagnostic also makes drift
+over the rollout horizon easy to spot.
+
 ## WebSocket API
 
 Run the API after producing both model checkpoints and latent seed episodes:

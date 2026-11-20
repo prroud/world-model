@@ -144,8 +144,13 @@ uvicorn world_model.api:app --app-dir src --host 127.0.0.1 --port 8000
 Connect to `ws://127.0.0.1:8000/ws/dream`. Send JSON messages with type
 `reset` (optional `seed`, `episode_index`, and `frame_index`), `action` (an
 `action` array in steering/gas/brake order, optionally with `temperature`), or
-`temperature` (a numeric `value`). Frame responses contain a Base64 PNG in
-`image`, the current 32-value `latent`, and the active `temperature`. The
+`temperature` (a numeric `value`). Send `compare` with `enabled: true` to start
+a Gymnasium reference environment, or `enabled: false` to stop it. The same
+actions are then sent to both systems. Frame responses contain a Base64 PNG in
+`image`, the current 32-value `latent`, and the active `temperature`; while
+comparison is enabled, they also contain a `reference_image`. The reference
+environment starts independently, so this mode compares reactions to input
+rather than matching identical physical states. The
 `/health` endpoint reports API process health; it does not verify model files.
 Open `http://127.0.0.1:8000/` for the browser demo. Use the arrow keys or WASD
 to steer, accelerate, and brake; the side panel shows temperature, generated

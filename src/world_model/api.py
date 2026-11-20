@@ -9,10 +9,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
+import gymnasium as gym
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
+from starlette.concurrency import run_in_threadpool
 
 from world_model.engine import WorldEngine
 
@@ -25,6 +27,14 @@ def encode_frame(frame: np.ndarray) -> str:
     image_buffer = io.BytesIO()
     Image.fromarray(frame).save(image_buffer, format="PNG")
     return base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+
+def resize_reference(frame: np.ndarray) -> np.ndarray:
+    """Resize a Gymnasium RGB observation to the model's 64x64 display size."""
+    return np.asarray(
+        Image.fromarray(frame).resize((64, 64), Image.Resampling.BILINEAR),
+        dtype=np.uint8,
+    )
 
 
 def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
@@ -50,6 +60,7 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
             await websocket.close(code=1011)
             return
 
+        comparison_env = None
         try:
             while True:
                 raw_message = await websocket.receive_text()
@@ -60,7 +71,8 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                     message_type = message.get("type")
 
                     if message_type == "reset":
-                        frame = engine.reset(
+                        frame = await run_in_threadpool(
+                            engine.reset,
                             seed=message.get("seed"),
                             episode_index=message.get("episode_index"),
                             frame_index=message.get("frame_index"),
@@ -71,16 +83,57 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                             "latent": engine.latent.tolist(),
                             "temperature": engine.temperature,
                         }
+                        if comparison_env is not None:
+                            observation, _ = await run_in_threadpool(
+                                comparison_env.reset, seed=message.get("seed")
+                            )
+                            response["reference_image"] = encode_frame(
+                                resize_reference(observation)
+                            )
                     elif message_type == "action":
                         if "temperature" in message:
                             engine.set_temperature(float(message["temperature"]))
-                        frame = engine.step(message.get("action"))
+                        action = np.asarray(message.get("action"), dtype=np.float32)
+                        if action.shape != (3,) or not np.isfinite(action).all():
+                            raise ValueError("action must contain three finite values")
+                        action = np.clip(action, [-1.0, 0.0, 0.0], [1.0, 1.0, 1.0])
+                        frame = await run_in_threadpool(engine.step, action)
                         response = {
                             "type": "frame",
                             "image": encode_frame(frame),
                             "latent": engine.latent.tolist(),
                             "temperature": engine.temperature,
                         }
+                        if comparison_env is not None:
+                            observation, _, terminated, truncated, _ = await run_in_threadpool(
+                                comparison_env.step, action
+                            )
+                            reference_restarted = terminated or truncated
+                            if reference_restarted:
+                                observation, _ = await run_in_threadpool(comparison_env.reset)
+                            response["reference_image"] = encode_frame(
+                                resize_reference(observation)
+                            )
+                            response["reference_restarted"] = reference_restarted
+                    elif message_type == "compare":
+                        enabled = bool(message.get("enabled"))
+                        if enabled and comparison_env is None:
+                            comparison_env = gym.make("CarRacing-v3", render_mode="rgb_array")
+                            observation, _ = await run_in_threadpool(
+                                comparison_env.reset, seed=message.get("seed")
+                            )
+                            response = {
+                                "type": "comparison",
+                                "enabled": True,
+                                "reference_image": encode_frame(resize_reference(observation)),
+                                "note": "The Gymnasium reference starts from an independent state.",
+                            }
+                        elif not enabled and comparison_env is not None:
+                            await run_in_threadpool(comparison_env.close)
+                            comparison_env = None
+                            response = {"type": "comparison", "enabled": False}
+                        else:
+                            response = {"type": "comparison", "enabled": enabled}
                     elif message_type == "temperature":
                         engine.set_temperature(float(message.get("value")))
                         response = {
@@ -90,10 +143,13 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                     else:
                         raise ValueError("type must be reset, action, or temperature")
                     await websocket.send_json(response)
-                except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
         except WebSocketDisconnect:
             pass
+        finally:
+            if comparison_env is not None:
+                await run_in_threadpool(comparison_env.close)
 
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     return app

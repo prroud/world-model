@@ -113,6 +113,15 @@ frame = engine.step([0.0, 0.8, 0.0])  # steering, gas, brake
 `frame` is an RGB `uint8` array of shape `64×64×3`. Call
 `engine.set_temperature(value)` to adjust sampling while the dream is running.
 
+Measure end-to-end frame generation after training the models:
+
+```powershell
+python scripts/benchmark_engine.py --steps 500 --json-out artifacts/benchmark.json
+```
+
+The benchmark includes recurrent prediction, VAE decoding, and conversion to an
+RGB image. It reports mean, median, p95, and p99 latency plus average FPS.
+
 ## WebSocket API
 
 Run the API after producing both model checkpoints and latent seed episodes:

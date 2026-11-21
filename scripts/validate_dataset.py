@@ -22,8 +22,17 @@ def inspect_episode(path: Path) -> dict:
             actions = episode["actions"]
             rewards = episode["rewards"]
             dones = episode["dones"]
+            episode_index = episode["episode_index"].item() if "episode_index" in episode else None
+            episode_seed = episode["episode_seed"].item() if "episode_seed" in episode else None
     except Exception as exc:
         return {"file": path.name, "errors": [f"cannot read archive: {exc}"], "warnings": []}
+
+    if episode_index is None or episode_seed is None:
+        warnings.append("missing episode seed/index metadata; exact replay may not be possible")
+    elif not isinstance(episode_index, (int, np.integer)) or not isinstance(
+        episode_seed, (int, np.integer)
+    ):
+        warnings.append("episode seed/index metadata must be integer scalars")
 
     if observations.ndim != 4 or observations.shape[1:] != (64, 64, 3):
         errors.append(f"observations must have shape (T, 64, 64, 3), got {observations.shape}")
@@ -73,6 +82,8 @@ def inspect_episode(path: Path) -> dict:
     return {
         "file": path.name,
         "frames": int(len(observations)),
+        "episode_index": episode_index,
+        "episode_seed": episode_seed,
         "errors": errors,
         "warnings": warnings,
     }

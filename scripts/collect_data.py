@@ -52,10 +52,11 @@ def collect_episodes(
         )
 
     env = gym.make("CarRacing-v3", render_mode="human" if render else None)
-    rng = np.random.default_rng(seed)
     try:
         for episode_index in range(episodes):
-            observation, _ = env.reset(seed=seed + episode_index)
+            episode_seed = seed + episode_index
+            observation, _ = env.reset(seed=episode_seed)
+            rng = np.random.default_rng(episode_seed)
             frames: list[np.ndarray] = []
             actions: list[np.ndarray] = []
             rewards: list[float] = []
@@ -87,6 +88,8 @@ def collect_episodes(
                     dones=dones,
                     image_size=np.asarray(IMAGE_SIZE, dtype=np.int32),
                     env_id=np.asarray("CarRacing-v3"),
+                    episode_index=np.asarray(episode_index, dtype=np.int32),
+                    episode_seed=np.asarray(episode_seed, dtype=np.int64),
                 )
             print(f"Episode {episode_index + 1}/{episodes}: {step} frames -> {episode_path}")
     finally:
@@ -100,8 +103,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--render", action="store_true", help="Show the Gymnasium window")
     args = parser.parse_args()
-    if args.episodes < 1:
-        parser.error("--episodes must be at least 1")
+    if args.episodes < 1 or args.seed < 0:
+        parser.error("--episodes must be positive and --seed must be nonnegative")
     return args
 
 

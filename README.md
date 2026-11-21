@@ -52,7 +52,10 @@ python scripts/collect_data.py --episodes 20 --output data/carracing
 The collector writes one compressed `.npz` file per episode. Each file contains
 `observations` (`uint8`, shape `T×64×64×3`), `actions` (`float32`, shape
 `T×3`), `rewards` (`float32`, shape `T`), `dones` (`bool`, shape `T`), and
-basic environment metadata. The final `dones` entry marks the episode boundary.
+environment and reproducibility metadata, including the episode index and RNG
+seed. Each episode's environment and action sampler use that seed, so the
+trajectory can be regenerated independently with the same code and dependency
+versions. The final `dones` entry marks the episode boundary.
 The output directory must not already contain files named `episode_*.npz`.
 
 Use `--render` to display the environment while collecting. This is slower, but

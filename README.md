@@ -58,6 +58,16 @@ The output directory must not already contain files named `episode_*.npz`.
 Use `--render` to display the environment while collecting. This is slower, but
 useful for visually checking the exploratory driving behavior.
 
+Audit the saved episodes before training:
+
+```powershell
+python scripts/validate_dataset.py --data data/carracing --json-out artifacts/data-audit.json
+```
+
+The audit checks array shapes and types, aligned sequence lengths, action bounds,
+and episode boundaries. Fully black or repeated adjacent frames are reported as
+warnings for review; structural and value errors produce a nonzero exit status.
+
 ## Training the VAE
 
 Train on the collected episode files with:

@@ -16,6 +16,7 @@ const modelState = document.querySelector('#model-state');
 const inputState = document.querySelector('#input-state');
 const latentCanvas = document.querySelector('#latent-chart');
 const latentContext = latentCanvas.getContext('2d');
+const latentSliders = document.querySelector('#latent-sliders');
 
 const heldKeys = new Set();
 let socket;
@@ -26,6 +27,8 @@ let previousFrameTime = 0;
 let fpsSamples = [];
 let currentLatent = [];
 let comparisonEnabled = false;
+let lastLatentEditAt = 0;
+let latentEditTimer;
 
 function setConnection(state, label) {
   connectionDot.classList.toggle('connected', state === 'connected');
@@ -53,10 +56,7 @@ function connect() {
       actionPending = false;
       frameCount += 1;
       frameCounter.textContent = `${frameCount} FRAMES`;
-      if (Array.isArray(message.latent)) {
-        currentLatent = message.latent;
-        drawLatent(currentLatent);
-      }
+      if (Array.isArray(message.latent)) updateLatent(message.latent);
       if (message.reference_image) showReferenceFrame(message.reference_image);
       const now = performance.now();
       if (previousFrameTime > 0) {
@@ -68,6 +68,9 @@ function connect() {
       modelState.textContent = 'Dreaming';
     } else if (message.type === 'temperature') {
       temperatureValue.textContent = Number(message.value).toFixed(2);
+    } else if (message.type === 'latent') {
+      updateLatent(message.latent);
+      frameElement.src = `data:image/png;base64,${message.image}`;
     } else if (message.type === 'comparison') {
       comparisonEnabled = message.enabled;
       compareButton.disabled = false;
@@ -118,6 +121,49 @@ function showReferenceFrame(image) {
   referenceElement.classList.add('visible');
 }
 
+function updateLatent(values) {
+  if (!Array.isArray(values)) return;
+  if (Date.now() - lastLatentEditAt > 300) currentLatent = values;
+  drawLatent(currentLatent);
+  latentSliders.querySelectorAll('input').forEach((slider, index) => {
+    if (document.activeElement === slider) return;
+    slider.value = currentLatent[index] ?? 0;
+    slider.previousElementSibling.querySelector('output').value = Number(currentLatent[index] ?? 0).toFixed(2);
+  });
+}
+
+function createLatentSliders() {
+  for (let index = 0; index < 32; index += 1) {
+    const control = document.createElement('div');
+    control.className = 'latent-control';
+    const label = document.createElement('label');
+    label.htmlFor = `latent-${index}`;
+    label.textContent = `z${index}`;
+    const output = document.createElement('output');
+    output.value = '0.00';
+    const slider = document.createElement('input');
+    slider.id = `latent-${index}`;
+    slider.type = 'range';
+    slider.min = '-3';
+    slider.max = '3';
+    slider.step = '0.01';
+    slider.value = '0';
+    slider.addEventListener('input', () => {
+      currentLatent[index] = Number(slider.value);
+      output.value = Number(slider.value).toFixed(2);
+      lastLatentEditAt = Date.now();
+      drawLatent(currentLatent);
+      clearTimeout(latentEditTimer);
+      latentEditTimer = setTimeout(() => {
+        send({ type: 'latent', values: currentLatent });
+      }, 80);
+    });
+    label.append(output);
+    control.append(label, slider);
+    latentSliders.append(control);
+  }
+}
+
 function toggleComparison() {
   if (socket?.readyState !== WebSocket.OPEN) return;
   compareButton.disabled = true;
@@ -166,6 +212,7 @@ function drawLatent(values) {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (event.target instanceof HTMLInputElement && event.target.type === 'range') return;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'd', 'w', 's'].includes(key)) {
     event.preventDefault();
@@ -194,4 +241,5 @@ setInterval(() => {
 }, 50);
 
 drawLatent(currentLatent);
+createLatentSliders();
 connect();

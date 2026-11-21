@@ -81,6 +81,11 @@
             <div class="panel-title"><span class="panel-index">03</span><h2>Latent state</h2><span id="latent-dim" class="dim-label">32 DIM</span></div>
             <canvas id="latent-chart" width="640" height="132" aria-label="Chart of the current 32-dimensional latent state"></canvas>
             <div class="chart-scale"><span>−</span><span>Each bar is one latent dimension</span><span>+</span></div>
+            <details id="latent-editor" class="latent-editor">
+              <summary>Edit latent dimensions</summary>
+              <p>Values are bounded to −3…+3. Editing replaces the current latent vector while retaining LSTM memory.</p>
+              <div id="latent-sliders" class="latent-sliders"></div>
+            </details>
           </section>
         </aside>
       </section>

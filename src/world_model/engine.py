@@ -84,6 +84,24 @@ class WorldEngine:
             raise ValueError("temperature must be a finite nonnegative number")
         self._temperature = float(temperature)
 
+    def set_latent(self, values: np.ndarray | list[float] | tuple[float, ...]) -> np.ndarray:
+        """Replace the current latent vector and return its decoded image.
+
+        The recurrent hidden state is retained, allowing an intervention on
+        the current representation without discarding sequence context.
+        """
+        if self._hidden is None:
+            raise RuntimeError("Call reset() before editing the latent state")
+        latent_array = np.asarray(values, dtype=np.float32)
+        if latent_array.shape != (self.vae.latent_dim,) or not np.isfinite(latent_array).all():
+            raise ValueError(
+                f"latent values must contain {self.vae.latent_dim} finite numbers"
+            )
+        self._latent = torch.as_tensor(
+            latent_array, dtype=torch.float32, device=self.device
+        ).unsqueeze(0)
+        return self._decode(self._latent)
+
     def reset(
         self,
         seed: int | None = None,

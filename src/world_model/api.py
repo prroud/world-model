@@ -140,8 +140,19 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                             "type": "temperature",
                             "value": engine.temperature,
                         }
+                    elif message_type == "latent":
+                        frame = await run_in_threadpool(
+                            engine.set_latent, message.get("values")
+                        )
+                        response = {
+                            "type": "latent",
+                            "image": encode_frame(frame),
+                            "latent": engine.latent.tolist(),
+                        }
                     else:
-                        raise ValueError("type must be reset, action, or temperature")
+                        raise ValueError(
+                            "type must be reset, action, temperature, compare, or latent"
+                        )
                     await websocket.send_json(response)
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})

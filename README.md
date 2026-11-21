@@ -160,10 +160,14 @@ actions are then sent to both systems. Frame responses contain a Base64 PNG in
 `image`, the current 32-value `latent`, and the active `temperature`; while
 comparison is enabled, they also contain a `reference_image`. The reference
 environment starts independently, so this mode compares reactions to input
-rather than matching identical physical states. The
+rather than matching identical physical states. Send `latent` with a 32-value
+`values` array to replace the current latent vector while retaining recurrent
+memory. The
 `/health` endpoint reports API process health; it does not verify model files.
 Open `http://127.0.0.1:8000/` for the browser demo. Use the arrow keys or WASD
 to steer, accelerate, and brake; the side panel shows temperature, generated
 frame rate, and a read-only chart of the current latent vector. Use
 `Compare Gymnasium` to display the real environment next to the generated
-frame while both receive the same controls.
+frame while both receive the same controls. Expand `Edit latent dimensions` to
+override the 32 latent values; this keeps the current LSTM memory, so it changes
+the current representation without resetting all sequence context.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
 
 import numpy as np
@@ -160,42 +161,62 @@ def main() -> None:
     print(f"Training on {device}; {len(training_files)} train episodes, "
           f"{len(validation_files)} validation episodes")
 
-    for epoch in range(1, args.epochs + 1):
-        train_loss, train_recon, train_kl = run_epoch(
-            model, training_files, args.batch_size, device, args.beta, rng, optimizer
+    with (args.output / "history.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as history_file:
+        history = csv.writer(history_file)
+        history.writerow(
+            [
+                "epoch",
+                "train_loss",
+                "train_reconstruction",
+                "train_kl",
+                "validation_loss",
+                "validation_reconstruction",
+                "validation_kl",
+            ]
         )
-        if validation_files:
-            val_loss, val_recon, val_kl = run_epoch(
-                model, validation_files, args.batch_size, device, args.beta, rng
+        for epoch in range(1, args.epochs + 1):
+            train_loss, train_recon, train_kl = run_epoch(
+                model, training_files, args.batch_size, device, args.beta, rng, optimizer
             )
-            selection_loss = val_loss
-            print(f"Epoch {epoch:03d}: train={train_loss:.2f} "
-                  f"(recon={train_recon:.2f}, kl={train_kl:.2f}) "
-                  f"val={val_loss:.2f} (recon={val_recon:.2f}, kl={val_kl:.2f})")
-        else:
-            selection_loss = train_loss
-            print(f"Epoch {epoch:03d}: train={train_loss:.2f} "
-                  f"(recon={train_recon:.2f}, kl={train_kl:.2f})")
-        if selection_loss < best_selection_loss:
-            best_selection_loss = selection_loss
-            best_state = {
-                name: value.detach().cpu().clone()
-                for name, value in model.state_dict().items()
-            }
-            torch.save(
-                {
-                    "state_dict": best_state,
-                    "latent_dim": args.latent_dim,
-                    "epoch": epoch,
-                    "selection_loss": selection_loss,
-                },
-                args.output / "vae.pt",
-            )
+            if validation_files:
+                val_loss, val_recon, val_kl = run_epoch(
+                    model, validation_files, args.batch_size, device, args.beta, rng
+                )
+                selection_loss = val_loss
+                history.writerow(
+                    [epoch, train_loss, train_recon, train_kl, val_loss, val_recon, val_kl]
+                )
+                print(f"Epoch {epoch:03d}: train={train_loss:.2f} "
+                      f"(recon={train_recon:.2f}, kl={train_kl:.2f}) "
+                      f"val={val_loss:.2f} (recon={val_recon:.2f}, kl={val_kl:.2f})")
+            else:
+                selection_loss = train_loss
+                history.writerow([epoch, train_loss, train_recon, train_kl, "", "", ""])
+                print(f"Epoch {epoch:03d}: train={train_loss:.2f} "
+                      f"(recon={train_recon:.2f}, kl={train_kl:.2f})")
+            history_file.flush()
+            if selection_loss < best_selection_loss:
+                best_selection_loss = selection_loss
+                best_state = {
+                    name: value.detach().cpu().clone()
+                    for name, value in model.state_dict().items()
+                }
+                torch.save(
+                    {
+                        "state_dict": best_state,
+                        "latent_dim": args.latent_dim,
+                        "epoch": epoch,
+                        "selection_loss": selection_loss,
+                    },
+                    args.output / "vae.pt",
+                )
 
     if best_state is not None:
         model.load_state_dict(best_state)
     save_reconstruction_preview(model, files, args.output / "reconstructions.png", device)
-    print(f"Saved checkpoint and preview to {args.output}")
+    print(f"Saved checkpoint, history, and preview to {args.output}")
 
 
 if __name__ == "__main__":

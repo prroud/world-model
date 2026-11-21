@@ -80,7 +80,8 @@ The trainer keeps one episode in memory at a time, reserves complete episodes
 for validation, and writes the best checkpoint to `artifacts/vae/vae.pt`. It
 also writes `reconstructions.png`, with each original frame next to its
 deterministic reconstruction, for visual inspection. Use `--device cpu` or
-`--device cuda` to choose the compute device explicitly.
+`--device cuda` to choose the compute device explicitly. Per-epoch training and
+validation loss components are recorded in `artifacts/vae/history.csv`.
 
 ## Encoding latent sequences
 

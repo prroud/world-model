@@ -102,8 +102,18 @@ def run_epoch(
 def save_reconstruction_preview(
     model: VAE, files: list[Path], output_path: Path, device: torch.device
 ) -> None:
-    with np.load(files[0]) as episode:
-        frames = episode["observations"][:8]
+    preview_files = [files[index] for index in np.linspace(
+        0, len(files) - 1, num=min(8, len(files)), dtype=int
+    )]
+    selected_frames = []
+    for path in preview_files:
+        with np.load(path) as episode:
+            observations = episode["observations"]
+            if len(observations):
+                selected_frames.append(observations[len(observations) // 2])
+    if not selected_frames:
+        raise ValueError("Cannot create a reconstruction preview from empty episodes")
+    frames = np.stack(selected_frames)
     images = torch.from_numpy(frames.copy()).permute(0, 3, 1, 2)
     images = images.to(device=device, dtype=torch.float32).div_(255.0)
     model.eval()

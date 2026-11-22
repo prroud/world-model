@@ -84,7 +84,10 @@ for validation, and writes the best checkpoint to `artifacts/vae/vae.pt`. It
 also writes `reconstructions.png`, with each original frame next to its
 deterministic reconstruction, for visual inspection. Use `--device cpu` or
 `--device cuda` to choose the compute device explicitly. Per-epoch training and
-validation loss components are recorded in `artifacts/vae/history.csv`.
+validation loss components are recorded in `artifacts/vae/history.csv`. The
+default KL weight is `0.01` with a five-epoch linear warmup to reduce posterior
+collapse on the summed pixel reconstruction objective; override these with
+`--beta` and `--kl-warmup-epochs` if needed.
 
 ## Encoding latent sequences
 

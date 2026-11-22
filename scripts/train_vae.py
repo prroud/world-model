@@ -119,14 +119,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--latent-dim", type=int, default=32)
-    parser.add_argument("--beta", type=float, default=1.0)
+    parser.add_argument("--beta", type=float, default=0.01)
+    parser.add_argument("--kl-warmup-epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps")
     args = parser.parse_args()
-    if args.epochs < 1 or args.batch_size < 1:
-        parser.error("--epochs and --batch-size must be at least 1")
+    if args.epochs < 1 or args.batch_size < 1 or args.kl_warmup_epochs < 0:
+        parser.error("--epochs and --batch-size must be positive; KL warmup cannot be negative")
     if args.beta < 0 or not 0 <= args.validation_fraction < 1:
         parser.error("--beta must be nonnegative and validation fraction in [0, 1)")
     return args
@@ -168,6 +169,7 @@ def main() -> None:
         history.writerow(
             [
                 "epoch",
+                "beta_used",
                 "train_loss",
                 "train_reconstruction",
                 "train_kl",
@@ -177,24 +179,31 @@ def main() -> None:
             ]
         )
         for epoch in range(1, args.epochs + 1):
+            beta_used = args.beta * min(
+                1.0,
+                epoch / args.kl_warmup_epochs if args.kl_warmup_epochs else 1.0,
+            )
             train_loss, train_recon, train_kl = run_epoch(
-                model, training_files, args.batch_size, device, args.beta, rng, optimizer
+                model, training_files, args.batch_size, device, beta_used, rng, optimizer
             )
             if validation_files:
                 val_loss, val_recon, val_kl = run_epoch(
-                    model, validation_files, args.batch_size, device, args.beta, rng
+                    model, validation_files, args.batch_size, device, beta_used, rng
                 )
-                selection_loss = val_loss
+                selection_loss = val_recon + args.beta * val_kl
                 history.writerow(
-                    [epoch, train_loss, train_recon, train_kl, val_loss, val_recon, val_kl]
+                    [epoch, beta_used, train_loss, train_recon, train_kl,
+                     val_loss, val_recon, val_kl]
                 )
-                print(f"Epoch {epoch:03d}: train={train_loss:.2f} "
+                print(f"Epoch {epoch:03d} (beta={beta_used:.4f}): train={train_loss:.2f} "
                       f"(recon={train_recon:.2f}, kl={train_kl:.2f}) "
                       f"val={val_loss:.2f} (recon={val_recon:.2f}, kl={val_kl:.2f})")
             else:
-                selection_loss = train_loss
-                history.writerow([epoch, train_loss, train_recon, train_kl, "", "", ""])
-                print(f"Epoch {epoch:03d}: train={train_loss:.2f} "
+                selection_loss = train_recon + args.beta * train_kl
+                history.writerow(
+                    [epoch, beta_used, train_loss, train_recon, train_kl, "", "", ""]
+                )
+                print(f"Epoch {epoch:03d} (beta={beta_used:.4f}): train={train_loss:.2f} "
                       f"(recon={train_recon:.2f}, kl={train_kl:.2f})")
             history_file.flush()
             if selection_loss < best_selection_loss:
@@ -209,6 +218,8 @@ def main() -> None:
                         "latent_dim": args.latent_dim,
                         "epoch": epoch,
                         "selection_loss": selection_loss,
+                        "beta": args.beta,
+                        "kl_warmup_epochs": args.kl_warmup_epochs,
                     },
                     args.output / "vae.pt",
                 )

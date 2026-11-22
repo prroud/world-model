@@ -9,7 +9,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
-from torch.nn import functional as F
 
 from world_model.vae import VAE
 
@@ -47,10 +46,15 @@ def vae_loss(
     mu: torch.Tensor,
     logvar: torch.Tensor,
     beta: float,
+    foreground_weight: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Return per-batch ELBO loss and its reconstruction/KL components."""
-    reconstruction_per_sample = F.mse_loss(
-        reconstruction, images, reduction="none"
+    """Return ELBO components with extra weight on non-background pixels."""
+    background_color = images.flatten(2).median(dim=2).values[:, :, None, None]
+    color_distance = (images - background_color).square().mean(dim=1, keepdim=True).sqrt()
+    pixel_weights = 1.0 + foreground_weight * color_distance
+    pixel_weights = pixel_weights / pixel_weights.mean(dim=(2, 3), keepdim=True)
+    reconstruction_per_sample = (
+        (reconstruction - images).square() * pixel_weights
     ).flatten(1).sum(dim=1)
     kl_per_sample = -0.5 * (1 + logvar - mu.square() - logvar.exp()).sum(dim=1)
     reconstruction_loss = reconstruction_per_sample.mean()
@@ -64,6 +68,7 @@ def run_epoch(
     batch_size: int,
     device: torch.device,
     beta: float,
+    foreground_weight: float,
     rng: np.random.Generator,
     optimizer: torch.optim.Optimizer | None = None,
 ) -> tuple[float, float, float]:
@@ -74,7 +79,7 @@ def run_epoch(
         for images in episode_batches(files, batch_size, device, training, rng):
             reconstruction, mu, logvar = model(images, sample=training)
             loss, reconstruction_loss, kl_loss = vae_loss(
-                reconstruction, images, mu, logvar, beta
+                reconstruction, images, mu, logvar, beta, foreground_weight
             )
             if optimizer is not None:
                 optimizer.zero_grad(set_to_none=True)
@@ -121,6 +126,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--latent-dim", type=int, default=32)
     parser.add_argument("--beta", type=float, default=0.01)
     parser.add_argument("--kl-warmup-epochs", type=int, default=5)
+    parser.add_argument("--foreground-weight", type=float, default=4.0)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=1234)
@@ -128,8 +134,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1 or args.kl_warmup_epochs < 0:
         parser.error("--epochs and --batch-size must be positive; KL warmup cannot be negative")
-    if args.beta < 0 or not 0 <= args.validation_fraction < 1:
-        parser.error("--beta must be nonnegative and validation fraction in [0, 1)")
+    if args.beta < 0 or args.foreground_weight < 0 or not 0 <= args.validation_fraction < 1:
+        parser.error("beta and foreground weight must be nonnegative; validation fraction in [0, 1)")
     return args
 
 
@@ -184,11 +190,13 @@ def main() -> None:
                 epoch / args.kl_warmup_epochs if args.kl_warmup_epochs else 1.0,
             )
             train_loss, train_recon, train_kl = run_epoch(
-                model, training_files, args.batch_size, device, beta_used, rng, optimizer
+                model, training_files, args.batch_size, device, beta_used,
+                args.foreground_weight, rng, optimizer
             )
             if validation_files:
                 val_loss, val_recon, val_kl = run_epoch(
-                    model, validation_files, args.batch_size, device, beta_used, rng
+                    model, validation_files, args.batch_size, device, beta_used,
+                    args.foreground_weight, rng
                 )
                 selection_loss = val_recon + args.beta * val_kl
                 history.writerow(
@@ -220,6 +228,7 @@ def main() -> None:
                         "selection_loss": selection_loss,
                         "beta": args.beta,
                         "kl_warmup_epochs": args.kl_warmup_epochs,
+                        "foreground_weight": args.foreground_weight,
                     },
                     args.output / "vae.pt",
                 )

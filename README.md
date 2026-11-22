@@ -86,8 +86,11 @@ deterministic reconstruction, for visual inspection. Use `--device cpu` or
 `--device cuda` to choose the compute device explicitly. Per-epoch training and
 validation loss components are recorded in `artifacts/vae/history.csv`. The
 default KL weight is `0.01` with a five-epoch linear warmup to reduce posterior
-collapse on the summed pixel reconstruction objective; override these with
-`--beta` and `--kl-warmup-epochs` if needed.
+collapse on the summed pixel reconstruction objective. The reconstruction
+loss also raises pixel weights for colors that differ from each frame's median
+background color, helping retain the small track and car details. Tune this
+with `--foreground-weight`; override the KL settings with `--beta` and
+`--kl-warmup-epochs` if needed.
 
 ## Encoding latent sequences
 

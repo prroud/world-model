@@ -62,7 +62,7 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
     async def dream_socket(websocket: WebSocket) -> None:
         await websocket.accept()
         try:
-            engine = engine_factory()
+            engine = await run_in_threadpool(engine_factory)
         except Exception as exc:
             await websocket.send_json({"type": "error", "message": str(exc)})
             await websocket.close(code=1011)

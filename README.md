@@ -148,10 +148,18 @@ Inspect open-loop quality against a recorded episode with:
 python scripts/evaluate_rollout.py --episode-index 0 --horizon 100 --temperature 0
 ```
 
-The script feeds the episode's recorded actions to the MDN-RNN from a recorded
-latent seed, then writes a real-versus-dream contact sheet and per-step pixel
-MAE values under `artifacts/rollout/`. This visual diagnostic also makes drift
-over the rollout horizon easy to spot.
+The script feeds recorded actions to the MDN-RNN from recorded latent seeds,
+then writes real-versus-dream contact sheets, per-step pixel MAE files, and a
+summary CSV under `artifacts/rollout/`. To compare multiple held-out episodes
+and horizons in one run, use comma-separated indices and horizons:
+
+```powershell
+python scripts/evaluate_rollout.py --episode-indices 0,1,2 --horizons 25,50,100 --temperature 0
+```
+
+`summary.csv` reports mean error and the first and last ten-step window for
+each episode/horizon pair. Each episode's contact sheet shows the longest
+requested horizon; its per-step CSV contains errors up to that horizon.
 
 ## WebSocket API
 

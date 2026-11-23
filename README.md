@@ -64,12 +64,15 @@ useful for visually checking the exploratory driving behavior.
 Audit the saved episodes before training:
 
 ```powershell
-python scripts/validate_dataset.py --data data/carracing --json-out artifacts/data-audit.json
+python scripts/validate_dataset.py --data data/carracing --json-out artifacts/data-audit.json --preview-out artifacts/data-preview.png
 ```
 
 The audit checks array shapes and types, aligned sequence lengths, action bounds,
-and episode boundaries. Fully black or repeated adjacent frames are reported as
-warnings for review; structural and value errors produce a nonzero exit status.
+and episode boundaries. Its JSON report includes min/max/mean/standard deviation
+for each action component, both per episode and across the dataset. The optional
+preview contact sheet samples frames evenly from each episode for a quick visual
+check. Fully black or repeated adjacent frames are reported as warnings for
+review; structural and value errors produce a nonzero exit status.
 
 ## Training the VAE
 

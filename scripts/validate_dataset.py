@@ -34,6 +34,24 @@ def action_statistics(actions: np.ndarray) -> dict | None:
     }
 
 
+def scalar_statistics(values: np.ndarray) -> dict | None:
+    if (
+        values.ndim != 1
+        or not np.issubdtype(values.dtype, np.number)
+        or np.issubdtype(values.dtype, np.complexfloating)
+        or not np.isfinite(values).all()
+        or len(values) == 0
+    ):
+        return None
+    return {
+        "min": float(values.min()),
+        "max": float(values.max()),
+        "mean": float(values.mean()),
+        "median": float(np.median(values)),
+        "std": float(values.std()),
+    }
+
+
 def save_preview(paths: list[Path], output_path: Path, samples_per_episode: int) -> None:
     tiles: list[tuple[str, np.ndarray]] = []
     for path in paths:
@@ -137,6 +155,23 @@ def inspect_episode(path: Path) -> dict:
         "frames": int(len(observations)),
         "episode_index": episode_index,
         "episode_seed": episode_seed,
+        "episode_return": (
+            float(rewards.sum())
+            if rewards.ndim == 1
+            and np.issubdtype(rewards.dtype, np.number)
+            and not np.issubdtype(rewards.dtype, np.complexfloating)
+            and np.isfinite(rewards).all()
+            else None
+        ),
+        "mean_step_reward": (
+            float(rewards.mean())
+            if rewards.ndim == 1
+            and len(rewards)
+            and np.issubdtype(rewards.dtype, np.number)
+            and not np.issubdtype(rewards.dtype, np.complexfloating)
+            and np.isfinite(rewards).all()
+            else None
+        ),
         "action_statistics": action_statistics(actions),
         "errors": errors,
         "warnings": warnings,
@@ -168,6 +203,14 @@ def main() -> None:
         except Exception:
             continue
     combined_actions = np.concatenate(all_actions) if all_actions else np.empty((0, 3))
+    valid_returns = np.asarray(
+        [episode["episode_return"] for episode in episodes if episode.get("episode_return") is not None],
+        dtype=np.float64,
+    )
+    episode_lengths = np.asarray(
+        [episode["frames"] for episode in episodes if episode.get("frames", 0) > 0],
+        dtype=np.float64,
+    )
     report = {
         "directory": str(args.data),
         "episode_count": len(episodes),
@@ -175,6 +218,8 @@ def main() -> None:
         "error_count": sum(len(episode["errors"]) for episode in episodes),
         "warning_count": sum(len(episode["warnings"]) for episode in episodes),
         "action_statistics": action_statistics(combined_actions),
+        "episode_length_statistics": scalar_statistics(episode_lengths),
+        "episode_return_statistics": scalar_statistics(valid_returns),
         "episodes": episodes,
     }
     print(json.dumps(report, indent=2))

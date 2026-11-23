@@ -86,10 +86,12 @@ python scripts/validate_dataset.py --data data/carracing --json-out artifacts/da
 
 The audit checks array shapes and types, aligned sequence lengths, action bounds,
 and episode boundaries. Its JSON report includes min/max/mean/standard deviation
-for each action component, both per episode and across the dataset. The optional
-preview contact sheet samples frames evenly from each episode for a quick visual
-check. Fully black or repeated adjacent frames are reported as warnings for
-review; structural and value errors produce a nonzero exit status.
+for each action component, both per episode and across the dataset. It also
+summarizes episode lengths and total returns across the dataset and reports each
+episode's return and mean step reward. The optional preview contact sheet
+samples frames evenly from each episode for a quick visual check. Fully black
+or repeated adjacent frames are reported as warnings for review; structural and
+value errors produce a nonzero exit status.
 
 ## Training the VAE
 

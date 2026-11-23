@@ -184,7 +184,11 @@ environment starts independently, so this mode compares reactions to input
 rather than matching identical physical states. Send `latent` with a 32-value
 `values` array to replace the current latent vector while retaining recurrent
 memory. The
-`/health` endpoint reports API process health; it does not verify model files.
+`/live` reports that the API process is running. `/health` checks whether the
+default VAE checkpoint, MDN-RNN checkpoint, and at least one encoded seed
+episode are present; it returns HTTP 503 with failed checks until the assets
+are available. This is a file-presence check and does not load or validate the
+checkpoint contents.
 Open `http://127.0.0.1:8000/` for the browser demo. Use the arrow keys or WASD
 to steer, accelerate, and brake; the side panel shows temperature, generated
 frame rate, and a read-only chart of the current latent vector. Use

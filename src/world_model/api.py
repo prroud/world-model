@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import gymnasium as gym
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from starlette.concurrency import run_in_threadpool
@@ -46,9 +46,17 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(static_dir / "index.html")
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
+    @app.get("/live")
+    async def live() -> dict[str, str]:
+        """Report that the API process is running."""
         return {"status": "ok"}
+
+    @app.get("/health")
+    async def health() -> JSONResponse:
+        """Report whether model assets are present for inference."""
+        readiness = WorldEngine.readiness()
+        status_code = 200 if readiness["status"] == "ready" else 503
+        return JSONResponse(readiness, status_code=status_code)
 
     @app.websocket("/ws/dream")
     async def dream_socket(websocket: WebSocket) -> None:

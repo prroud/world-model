@@ -62,6 +62,29 @@ class WorldEngine:
         self._hidden: tuple[torch.Tensor, torch.Tensor] | None = None
 
     @staticmethod
+    def readiness(
+        vae_checkpoint: str | Path = "artifacts/vae/vae.pt",
+        dynamics_checkpoint: str | Path = "artifacts/mdn_rnn/mdn_rnn.pt",
+        seed_dir: str | Path = "data/latents",
+    ) -> dict[str, object]:
+        """Check whether the default inference assets are present without loading them."""
+        vae_path = Path(vae_checkpoint)
+        dynamics_path = Path(dynamics_checkpoint)
+        seed_path = Path(seed_dir)
+        seed_files = sorted(seed_path.glob("episode_*.npz")) if seed_path.is_dir() else []
+        checks = {
+            "vae_checkpoint": vae_path.is_file(),
+            "dynamics_checkpoint": dynamics_path.is_file(),
+            "seed_episodes": bool(seed_files),
+        }
+        return {
+            "status": "ready" if all(checks.values()) else "not_ready",
+            "checks": checks,
+            "seed_episode_count": len(seed_files),
+            "device": "cuda" if torch.cuda.is_available() else "cpu",
+        }
+
+    @staticmethod
     def _load_checkpoint(path: Path) -> dict:
         if not path.is_file():
             raise FileNotFoundError(f"Model checkpoint not found: {path}")

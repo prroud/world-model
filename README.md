@@ -36,6 +36,23 @@ most likely component mean.
 - Python 3.10 or newer
 - Install project dependencies with `pip install -e .`
 
+## Building and running the demo
+
+For a fresh end-to-end run, use:
+
+```powershell
+python scripts/run_demo.py
+```
+
+The launcher collects trajectories, audits and previews the dataset, trains
+both models, encodes latent episodes, and starts the web server. It defaults to
+20 episodes and the standard training epoch counts, so the first run can take
+a while. Set `--episodes`, `--vae-epochs`, `--rnn-epochs`, or `--device` to tune
+the run; `--render` shows the environment during collection. Use `--host` and
+`--port` to choose where the web server listens. The launcher stops before
+writing if its expected output artifacts already exist, so move those files
+aside before starting a new full build.
+
 ## Project layout
 
 Package code lives in `src/world_model/`, with runnable scripts in `scripts/`.

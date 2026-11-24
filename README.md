@@ -35,9 +35,6 @@ most likely component mean.
 
 - Python 3.10 or newer
 - Install project dependencies with `pip install -e .`
-- Install development dependencies and run unit tests with
-  `pip install -e ".[dev]"` and `python -m pytest -q`
-
 Install the test extra and run the unit suite with:
 
 ```powershell

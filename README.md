@@ -36,6 +36,17 @@ most likely component mean.
 - Python 3.10 or newer
 - Install project dependencies with `pip install -e .`
 
+Install the test extra and run the unit suite with:
+
+```powershell
+python -m pip install -e ".[test]"
+python -m pytest
+```
+
+GitHub Actions runs this suite on Python 3.10 and 3.12 for pushes and pull
+requests. Tests use synthetic inputs and do not require collected episodes or
+trained checkpoints.
+
 ## Building and running the demo
 
 For a fresh end-to-end run, use:

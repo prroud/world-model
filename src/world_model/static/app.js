@@ -8,6 +8,7 @@ const screenWrap = document.querySelector('#screen-wrap');
 const placeholder = document.querySelector('#screen-placeholder');
 const resetButton = document.querySelector('#reset-button');
 const compareButton = document.querySelector('#compare-button');
+const recordButton = document.querySelector('#record-button');
 const temperatureSlider = document.querySelector('#temperature');
 const temperatureValue = document.querySelector('#temperature-value');
 const fpsValue = document.querySelector('#fps-value');
@@ -17,6 +18,8 @@ const inputState = document.querySelector('#input-state');
 const latentCanvas = document.querySelector('#latent-chart');
 const latentContext = latentCanvas.getContext('2d');
 const latentSliders = document.querySelector('#latent-sliders');
+const recordCanvas = document.querySelector('#record-canvas');
+const recordContext = recordCanvas.getContext('2d');
 
 const heldKeys = new Set();
 let socket;
@@ -29,6 +32,15 @@ let currentLatent = [];
 let comparisonEnabled = false;
 let lastLatentEditAt = 0;
 let latentEditTimer;
+let mediaRecorder;
+let recordingStream;
+let recordedChunks = [];
+const recordingSupported = typeof MediaRecorder !== 'undefined'
+  && typeof recordCanvas.captureStream === 'function';
+
+if (!recordingSupported) {
+  recordButton.title = 'This browser does not support WebM recording.';
+}
 
 function setConnection(state, label) {
   connectionDot.classList.toggle('connected', state === 'connected');
@@ -36,6 +48,7 @@ function setConnection(state, label) {
   connectionLabel.textContent = label;
   resetButton.disabled = state !== 'connected';
   compareButton.disabled = state !== 'connected';
+  recordButton.disabled = state !== 'connected' || !hasReset || !recordingSupported;
 }
 
 function connect() {
@@ -53,6 +66,7 @@ function connect() {
       frameElement.classList.add('visible');
       placeholder.classList.add('hidden');
       hasReset = true;
+      recordButton.disabled = !recordingSupported || socket.readyState !== WebSocket.OPEN;
       actionPending = false;
       frameCount += 1;
       frameCounter.textContent = `${frameCount} FRAMES`;
@@ -93,11 +107,13 @@ function connect() {
   socket.addEventListener('close', () => {
     setConnection('error', 'Disconnected');
     hasReset = false;
+    recordButton.disabled = true;
     actionPending = false;
     comparisonEnabled = false;
     screenWrap.classList.remove('compare-mode');
     referenceView.hidden = true;
     modelState.textContent = 'Offline';
+    if (mediaRecorder?.state === 'recording') stopRecording();
   });
   socket.addEventListener('error', () => setConnection('error', 'Connection error'));
 }
@@ -109,6 +125,7 @@ function send(message) {
 function resetDream() {
   if (socket?.readyState !== WebSocket.OPEN) return;
   hasReset = false;
+  recordButton.disabled = true;
   actionPending = true;
   modelState.textContent = 'Resetting';
   placeholder.querySelector('span').textContent = 'Loading a real seed frame';
@@ -119,6 +136,105 @@ function resetDream() {
 function showReferenceFrame(image) {
   referenceElement.src = `data:image/png;base64,${image}`;
   referenceElement.classList.add('visible');
+}
+
+function drawRecordingFrame() {
+  if (!frameElement.complete || !frameElement.naturalWidth) return;
+  const { width, height } = recordCanvas;
+  recordContext.fillStyle = '#101317';
+  recordContext.fillRect(0, 0, width, height);
+  recordContext.fillStyle = '#171b20';
+  recordContext.fillRect(0, 0, width, 34);
+  recordContext.fillRect(0, height - 38, width, 38);
+
+  const frameSize = Math.min(height - 84, width - 48);
+  const x = Math.round((width - frameSize) / 2);
+  const y = Math.round((height - frameSize) / 2);
+  recordContext.imageSmoothingEnabled = false;
+  recordContext.drawImage(frameElement, x, y, frameSize, frameSize);
+
+  recordContext.fillStyle = '#c8f169';
+  recordContext.font = '500 12px monospace';
+  recordContext.textBaseline = 'middle';
+  recordContext.fillText('WORLD MODEL  /  DREAM DRIVE', 16, 17);
+  recordContext.fillStyle = '#b5bec7';
+  recordContext.font = '11px monospace';
+  recordContext.fillText(
+    `INPUT ${inputState.textContent.toUpperCase()}   TEMP ${Number(temperatureSlider.value).toFixed(2)}`,
+    16,
+    height - 19,
+  );
+  recordContext.textAlign = 'right';
+  recordContext.fillStyle = '#89929c';
+  recordContext.fillText(`FPS ${fpsValue.textContent}`, width - 16, height - 19);
+  recordContext.textAlign = 'left';
+}
+
+frameElement.addEventListener('load', drawRecordingFrame);
+
+function startRecording() {
+  if (!recordingSupported || !hasReset) return;
+  const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+    ? mimeTypes.find((type) => MediaRecorder.isTypeSupported(type))
+    : undefined;
+  try {
+    recordingStream = recordCanvas.captureStream(20);
+    const recorder = mimeType
+      ? new MediaRecorder(recordingStream, { mimeType })
+      : new MediaRecorder(recordingStream);
+    mediaRecorder = recorder;
+    recordedChunks = [];
+    recorder.addEventListener('dataavailable', (event) => {
+      if (event.data.size > 0) recordedChunks.push(event.data);
+    });
+    recorder.addEventListener('stop', () => {
+      const blob = new Blob(recordedChunks, { type: recorder.mimeType || 'video/webm' });
+      if (blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `world-model-dream-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        modelState.textContent = 'Recording saved';
+      } else {
+        modelState.textContent = 'Recording empty';
+      }
+      recordingStream?.getTracks().forEach((track) => track.stop());
+      recordingStream = undefined;
+      recordedChunks = [];
+      recordButton.classList.remove('recording');
+      recordButton.setAttribute('aria-pressed', 'false');
+      recordButton.innerHTML = '<span class="record-indicator" aria-hidden="true"></span> Record session';
+      recordButton.disabled = !recordingSupported || !hasReset || socket?.readyState !== WebSocket.OPEN;
+    }, { once: true });
+    recorder.start(1000);
+    recordButton.classList.add('recording');
+    recordButton.setAttribute('aria-pressed', 'true');
+    recordButton.innerHTML = '<span class="record-indicator" aria-hidden="true"></span> Stop recording';
+    drawRecordingFrame();
+  } catch (error) {
+    modelState.textContent = 'Recording unavailable';
+    console.error('Could not start browser recording:', error);
+    recordingStream?.getTracks().forEach((track) => track.stop());
+    recordingStream = undefined;
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder?.state === 'recording') {
+    recordButton.disabled = true;
+    modelState.textContent = 'Saving recording';
+    mediaRecorder.stop();
+  }
+}
+
+function toggleRecording() {
+  if (mediaRecorder?.state === 'recording') stopRecording();
+  else startRecording();
 }
 
 function updateLatent(values) {
@@ -231,6 +347,7 @@ temperatureSlider.addEventListener('input', () => {
 });
 resetButton.addEventListener('click', resetDream);
 compareButton.addEventListener('click', toggleComparison);
+recordButton.addEventListener('click', toggleRecording);
 
 setInterval(() => {
   if (!hasReset || actionPending || socket?.readyState !== WebSocket.OPEN) return;

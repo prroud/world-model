@@ -224,4 +224,7 @@ frame rate, and a read-only chart of the current latent vector. Use
 `Compare Gymnasium` to display the real environment next to the generated
 frame while both receive the same controls. Expand `Edit latent dimensions` to
 override the 32 latent values; this keeps the current LSTM memory, so it changes
-the current representation without resetting all sequence context.
+the current representation without resetting all sequence context. Use
+`Record session` to capture the generated World Model view as a local WebM clip
+with temperature, input, and FPS overlays. Recording uses the browser's
+MediaRecorder API and does not include audio or the Gymnasium comparison view.

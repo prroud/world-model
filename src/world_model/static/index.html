@@ -27,6 +27,9 @@
           <button id="compare-button" class="button button-secondary" disabled>
             <span aria-hidden="true">⇄</span> Compare Gymnasium
           </button>
+          <button id="record-button" class="button button-secondary" disabled>
+            <span class="record-indicator" aria-hidden="true"></span> Record session
+          </button>
           <button id="reset-button" class="button button-secondary" disabled>
             <span aria-hidden="true">↻</span> Reset dream
           </button>
@@ -95,6 +98,7 @@
         <span>Dreams drift. Reset to a real frame at any time.</span>
       </footer>
     </main>
+    <canvas id="record-canvas" class="record-canvas" width="640" height="426" aria-hidden="true"></canvas>
     <script src="/static/app.js" defer></script>
   </body>
 </html>

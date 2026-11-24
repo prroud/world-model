@@ -24,7 +24,7 @@ button, input { font: inherit; }
 .dot.connected, .live-dot { background: var(--accent); box-shadow: 0 0 12px #c8f16670; }
 .dot.error { background: #ff6d72; box-shadow: 0 0 12px #ff6d7270; }
 .intro { display: flex; align-items: end; justify-content: space-between; padding: 48px 0 28px; }
-.intro-actions { display: flex; gap: 8px; }
+.intro-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .eyebrow, .card-heading, .screen-footer, .panel-index, .dim-label, .page-footer { font-family: var(--mono); letter-spacing: .08em; }
 .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 10px; }
 h1 { margin: 0; font-size: clamp(34px, 5vw, 54px); line-height: 1.05; letter-spacing: -.055em; font-weight: 700; }
@@ -33,6 +33,10 @@ h1 span { color: var(--accent); }
 .button { display: inline-flex; align-items: center; gap: 9px; height: 40px; padding: 0 15px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); cursor: pointer; font-size: 11px; font-weight: 700; transition: .15s ease; }
 .button-secondary { background: var(--panel); }
 .button.active { border-color: var(--accent); color: var(--accent); }
+.record-indicator { width: 7px; height: 7px; border-radius: 50%; background: #ff6d72; box-shadow: 0 0 8px #ff6d7270; }
+.button.recording { border-color: #ff6d72; color: #ff8a8e; }
+.button.recording .record-indicator { animation: record-pulse 1s infinite; }
+@keyframes record-pulse { 50% { opacity: .35; } }
 .button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .button:disabled { opacity: .45; cursor: not-allowed; }
 .button span { font-size: 17px; }
@@ -87,6 +91,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 2px s
 .latent-control output { color: var(--accent); }
 .latent-control input[type="range"] { height: 2px; margin: 9px 0 4px; }
 .page-footer { display: flex; justify-content: space-between; gap: 12px; padding: 19px 0 25px; color: #626c76; font-size: 8px; }
+.record-canvas { position: fixed; top: 0; left: -10000px; width: 640px; height: 426px; pointer-events: none; }
 
 @media (max-width: 760px) {
   .shell { width: min(100% - 28px, 560px); }

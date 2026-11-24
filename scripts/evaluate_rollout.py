@@ -22,14 +22,46 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vae-checkpoint", type=Path, default=Path("artifacts/vae/vae.pt"))
     parser.add_argument("--dynamics-checkpoint", type=Path, default=Path("artifacts/mdn_rnn/mdn_rnn.pt"))
     parser.add_argument("--episode-index", type=int, default=0)
+    parser.add_argument(
+        "--episode-indices",
+        help="Comma-separated episode indices; overrides --episode-index",
+    )
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--horizon", type=int, default=100)
+    parser.add_argument(
+        "--horizons",
+        help="Comma-separated rollout horizons; overrides --horizon",
+    )
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps")
     parser.add_argument("--output", type=Path, default=Path("artifacts/rollout"))
     args = parser.parse_args()
-    if min(args.episode_index, args.start_frame) < 0 or args.horizon < 1:
-        parser.error("episode-index and start-frame must be nonnegative; horizon must be positive")
+    try:
+        args.selected_episodes = (
+            [int(value) for value in args.episode_indices.split(",")]
+            if args.episode_indices
+            else [args.episode_index]
+        )
+        args.selected_horizons = (
+            [int(value) for value in args.horizons.split(",")]
+            if args.horizons
+            else [args.horizon]
+        )
+    except ValueError:
+        parser.error("episode-indices and horizons must be comma-separated integers")
+    if (
+        not args.selected_episodes
+        or not args.selected_horizons
+        or
+        min(args.selected_episodes) < 0
+        or args.start_frame < 0
+        or min(args.selected_horizons) < 1
+        or len(set(args.selected_episodes)) != len(args.selected_episodes)
+        or len(set(args.selected_horizons)) != len(args.selected_horizons)
+    ):
+        parser.error(
+            "episode indices and start-frame must be nonnegative; horizons must be positive and lists nonempty and unique"
+        )
     if not np.isfinite(args.temperature) or args.temperature < 0:
         parser.error("temperature must be finite and nonnegative")
     return args
@@ -65,8 +97,8 @@ def main() -> None:
     latent_files = sorted(args.latent_data.glob("episode_*.npz"))
     if not latent_files:
         raise FileNotFoundError(f"No episode_*.npz files found in {args.latent_data}")
-    if args.episode_index >= len(latent_files):
-        raise IndexError(f"episode-index must be below {len(latent_files)}")
+    if max(args.selected_episodes) >= len(latent_files):
+        raise IndexError(f"episode indices must be below {len(latent_files)}")
 
     device_name = args.device
     if device_name == "auto":
@@ -90,58 +122,84 @@ def main() -> None:
     dynamics.load_state_dict(dynamics_payload["state_dict"])
     dynamics.to(device).eval()
 
-    latent_path = latent_files[args.episode_index]
-    with np.load(latent_path) as episode:
-        latents = episode["latents"]
-        actions = episode["actions"]
-        source_name = str(episode["source_episode"].item())
-    source_path = args.image_data / source_name
-    if not source_path.is_file():
-        raise FileNotFoundError(f"Source image episode not found: {source_path}")
-    with np.load(source_path) as episode:
-        observations = episode["observations"]
-
-    available_steps = min(len(latents), len(actions), len(observations)) - args.start_frame - 1
-    if available_steps < args.horizon:
-        raise ValueError(
-            f"Requested horizon {args.horizon}, but only {max(0, available_steps)} steps are available"
-        )
-
-    latent = torch.as_tensor(
-        latents[args.start_frame], dtype=torch.float32, device=device
-    ).unsqueeze(0)
-    hidden = dynamics.initial_state(batch_size=1, device=device)
-    real_frames: list[np.ndarray] = []
-    dream_frames: list[np.ndarray] = []
-    errors: list[float] = []
-    with torch.inference_mode():
-        for offset in range(args.horizon):
-            action = torch.as_tensor(
-                actions[args.start_frame + offset], dtype=torch.float32, device=device
-            ).unsqueeze(0)
-            latent, hidden = dynamics.step(latent, action, hidden, args.temperature)
-            dream = decode_image(vae, latent)
-            real = observations[args.start_frame + offset + 1]
-            real_frames.append(real)
-            dream_frames.append(dream)
-            errors.append(float(np.abs(real.astype(np.float32) - dream).mean()))
-
     args.output.mkdir(parents=True, exist_ok=True)
-    image_path = args.output / f"episode_{args.episode_index:05d}_rollout.png"
-    metrics_path = args.output / f"episode_{args.episode_index:05d}_metrics.csv"
-    save_contact_sheet(real_frames, dream_frames, image_path)
-    with metrics_path.open("w", newline="", encoding="utf-8") as metrics_file:
-        writer = csv.writer(metrics_file)
-        writer.writerow(["step", "pixel_mae_0_255"])
-        writer.writerows((index + 1, error) for index, error in enumerate(errors))
+    summary_rows = []
+    for episode_index in args.selected_episodes:
+        latent_path = latent_files[episode_index]
+        with np.load(latent_path) as episode:
+            latents = episode["latents"]
+            actions = episode["actions"]
+            source_name = str(episode["source_episode"].item())
+        source_path = args.image_data / source_name
+        if not source_path.is_file():
+            raise FileNotFoundError(f"Source image episode not found: {source_path}")
+        with np.load(source_path) as episode:
+            observations = episode["observations"]
+        available_steps = (
+            min(len(latents), len(actions), len(observations)) - args.start_frame - 1
+        )
+        if available_steps < max(args.selected_horizons):
+            raise ValueError(
+                f"Episode {episode_index} has {max(0, available_steps)} steps available; "
+                f"requested {max(args.selected_horizons)}"
+            )
 
-    first_window = float(np.mean(errors[: min(10, len(errors))]))
-    last_window = float(np.mean(errors[max(0, len(errors) - min(10, len(errors))) :]))
-    print(f"Episode: {source_name}; steps: {args.horizon}; temperature: {args.temperature}")
-    print(f"Mean pixel MAE: {np.mean(errors):.2f}/255")
-    print(f"First-window MAE: {first_window:.2f}/255; last-window MAE: {last_window:.2f}/255")
-    print(f"Saved visual comparison to {image_path}")
-    print(f"Saved per-step metrics to {metrics_path}")
+        latent = torch.as_tensor(
+            latents[args.start_frame], dtype=torch.float32, device=device
+        ).unsqueeze(0)
+        hidden = dynamics.initial_state(batch_size=1, device=device)
+        real_frames: list[np.ndarray] = []
+        dream_frames: list[np.ndarray] = []
+        errors: list[float] = []
+        with torch.inference_mode():
+            for offset in range(max(args.selected_horizons)):
+                action = torch.as_tensor(
+                    actions[args.start_frame + offset], dtype=torch.float32, device=device
+                ).unsqueeze(0)
+                latent, hidden = dynamics.step(latent, action, hidden, args.temperature)
+                dream = decode_image(vae, latent)
+                real = observations[args.start_frame + offset + 1]
+                real_frames.append(real)
+                dream_frames.append(dream)
+                errors.append(float(np.abs(real.astype(np.float32) - dream).mean()))
+
+        for horizon in args.selected_horizons:
+            selected = errors[:horizon]
+            window = min(10, horizon)
+            summary_rows.append(
+                [
+                    episode_index,
+                    source_name,
+                    horizon,
+                    float(np.mean(selected)),
+                    float(np.mean(selected[:window])),
+                    float(np.mean(selected[-window:])),
+                ]
+            )
+        image_path = args.output / f"episode_{episode_index:05d}_rollout.png"
+        save_contact_sheet(real_frames, dream_frames, image_path)
+        metrics_path = args.output / f"episode_{episode_index:05d}_metrics.csv"
+        with metrics_path.open("w", newline="", encoding="utf-8") as metrics_file:
+            writer = csv.writer(metrics_file)
+            writer.writerow(["step", "pixel_mae_0_255"])
+            writer.writerows((index + 1, error) for index, error in enumerate(errors))
+        print(f"Episode {episode_index} ({source_name}): saved {image_path} and {metrics_path}")
+
+    summary_path = args.output / "summary.csv"
+    with summary_path.open("w", newline="", encoding="utf-8") as summary_file:
+        writer = csv.writer(summary_file)
+        writer.writerow(
+            [
+                "episode_index",
+                "source_episode",
+                "horizon",
+                "mean_mae_0_255",
+                "first_window_mae_0_255",
+                "last_window_mae_0_255",
+            ]
+        )
+        writer.writerows(summary_rows)
+    print(f"Saved {len(summary_rows)} episode/horizon summaries to {summary_path}")
 
 
 if __name__ == "__main__":

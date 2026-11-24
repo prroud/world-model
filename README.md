@@ -38,6 +38,34 @@ most likely component mean.
 - Install development dependencies and run unit tests with
   `pip install -e ".[dev]"` and `python -m pytest -q`
 
+Install the test extra and run the unit suite with:
+
+```powershell
+python -m pip install -e ".[test]"
+python -m pytest
+```
+
+GitHub Actions runs this suite on Python 3.10 and 3.12 for pushes and pull
+requests. Tests use synthetic inputs and do not require collected episodes or
+trained checkpoints.
+
+## Building and running the demo
+
+For a fresh end-to-end run, use:
+
+```powershell
+python scripts/run_demo.py
+```
+
+The launcher collects trajectories, audits and previews the dataset, trains
+both models, encodes latent episodes, and starts the web server. It defaults to
+20 episodes and the standard training epoch counts, so the first run can take
+a while. Set `--episodes`, `--vae-epochs`, `--rnn-epochs`, or `--device` to tune
+the run; `--render` shows the environment during collection. Use `--host` and
+`--port` to choose where the web server listens. The launcher stops before
+writing if its expected output artifacts already exist, so move those files
+aside before starting a new full build.
+
 ## Project layout
 
 Package code lives in `src/world_model/`, with runnable scripts in `scripts/`.
@@ -66,12 +94,17 @@ useful for visually checking the exploratory driving behavior.
 Audit the saved episodes before training:
 
 ```powershell
-python scripts/validate_dataset.py --data data/carracing --json-out artifacts/data-audit.json
+python scripts/validate_dataset.py --data data/carracing --json-out artifacts/data-audit.json --preview-out artifacts/data-preview.png
 ```
 
 The audit checks array shapes and types, aligned sequence lengths, action bounds,
-and episode boundaries. Fully black or repeated adjacent frames are reported as
-warnings for review; structural and value errors produce a nonzero exit status.
+and episode boundaries. Its JSON report includes min/max/mean/standard deviation
+for each action component, both per episode and across the dataset. It also
+summarizes episode lengths and total returns across the dataset and reports each
+episode's return and mean step reward. The optional preview contact sheet
+samples frames evenly from each episode for a quick visual check. Fully black
+or repeated adjacent frames are reported as warnings for review; structural and
+value errors produce a nonzero exit status.
 
 ## Training the VAE
 
@@ -150,10 +183,18 @@ Inspect open-loop quality against a recorded episode with:
 python scripts/evaluate_rollout.py --episode-index 0 --horizon 100 --temperature 0
 ```
 
-The script feeds the episode's recorded actions to the MDN-RNN from a recorded
-latent seed, then writes a real-versus-dream contact sheet and per-step pixel
-MAE values under `artifacts/rollout/`. This visual diagnostic also makes drift
-over the rollout horizon easy to spot.
+The script feeds recorded actions to the MDN-RNN from recorded latent seeds,
+then writes real-versus-dream contact sheets, per-step pixel MAE files, and a
+summary CSV under `artifacts/rollout/`. To compare multiple held-out episodes
+and horizons in one run, use comma-separated indices and horizons:
+
+```powershell
+python scripts/evaluate_rollout.py --episode-indices 0,1,2 --horizons 25,50,100 --temperature 0
+```
+
+`summary.csv` reports mean error and the first and last ten-step window for
+each episode/horizon pair. Each episode's contact sheet shows the longest
+requested horizon; its per-step CSV contains errors up to that horizon.
 
 ## WebSocket API
 
@@ -175,7 +216,11 @@ environment starts independently, so this mode compares reactions to input
 rather than matching identical physical states. Send `latent` with a 32-value
 `values` array to replace the current latent vector while retaining recurrent
 memory. The
-`/health` endpoint reports API process health; it does not verify model files.
+`/live` reports that the API process is running. `/health` checks whether the
+default VAE checkpoint, MDN-RNN checkpoint, and at least one encoded seed
+episode are present; it returns HTTP 503 with failed checks until the assets
+are available. This is a file-presence check and does not load or validate the
+checkpoint contents.
 Open `http://127.0.0.1:8000/` for the browser demo. Use the arrow keys or WASD
 to steer, accelerate, and brake; the side panel shows temperature, generated
 frame rate, and a read-only chart of the current latent vector. Use

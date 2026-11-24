@@ -18,10 +18,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+<<<<<<< HEAD
 dev = ["pytest>=8.0,<9.0"]
+=======
+test = ["pytest>=8.0,<9.0"]
+>>>>>>> 54b6bdd423a2fa2c4e4b794e998ba7f67ee424c8
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 world_model = ["static/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src"]

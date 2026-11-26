@@ -147,12 +147,15 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                         if action.shape != (3,) or not np.isfinite(action).all():
                             raise ValueError("action must contain three finite values")
                         action = np.clip(action, [-1.0, 0.0, 0.0], [1.0, 1.0, 1.0])
-                        frame = await run_in_threadpool(engine.step, action)
+                        frame, uncertainty = await run_in_threadpool(
+                            engine.step_with_uncertainty, action
+                        )
                         response = {
                             "type": "frame",
                             "image": encode_frame(frame),
                             "latent": engine.latent.tolist(),
                             "temperature": engine.temperature,
+                            "uncertainty": uncertainty,
                         }
                         if comparison_env is not None:
                             observation, _, terminated, truncated, _ = await run_in_threadpool(

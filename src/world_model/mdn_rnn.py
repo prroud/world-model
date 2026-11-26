@@ -136,6 +136,38 @@ class MDNRNN(nn.Module):
         output = self(latent[:, None, :], action[:, None, :], hidden)
         return self.sample_next(output, temperature), output.hidden
 
+    def step_with_uncertainty(
+        self,
+        latent: torch.Tensor,
+        action: torch.Tensor,
+        hidden: tuple[torch.Tensor, torch.Tensor] | None = None,
+        temperature: float = 1.0,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], dict[str, torch.Tensor]]:
+        """Advance one step and also return mixture entropy and latent spread."""
+        if latent.ndim != 2 or latent.shape[-1] != self.latent_dim:
+            raise ValueError(f"latent must have shape (batch, {self.latent_dim})")
+        if action.ndim != 2 or action.shape[-1] != self.action_dim:
+            raise ValueError(f"action must have shape (batch, {self.action_dim})")
+        output = self(latent[:, None, :], action[:, None, :], hidden)
+        logits = output.mixture_logits[:, -1]
+        weights = F.softmax(logits, dim=-1)
+        entropy = -(weights * F.log_softmax(logits, dim=-1)).sum(dim=-1)
+        if self.num_mixtures > 1:
+            entropy = entropy / torch.log(logits.new_tensor(float(self.num_mixtures)))
+        else:
+            entropy = torch.zeros_like(entropy)
+
+        means = output.means[:, -1]
+        variances = torch.exp(2.0 * output.log_stds[:, -1])
+        mixture_mean = (weights.unsqueeze(-1) * means).sum(dim=1)
+        second_moment = (weights.unsqueeze(-1) * (variances + means.square())).sum(dim=1)
+        predictive_std = (second_moment - mixture_mean.square()).clamp_min(0).sqrt()
+        uncertainty = {
+            "mixture_entropy": entropy.mean(),
+            "mean_predictive_std": predictive_std.mean(),
+        }
+        return self.sample_next(output, temperature), output.hidden, uncertainty
+
 
 def mixture_nll(
     output: MDNOutput, targets: torch.Tensor

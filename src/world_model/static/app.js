@@ -15,6 +15,8 @@ const fpsValue = document.querySelector('#fps-value');
 const frameCounter = document.querySelector('#frame-counter');
 const modelState = document.querySelector('#model-state');
 const inputState = document.querySelector('#input-state');
+const mixtureUncertainty = document.querySelector('#mixture-uncertainty');
+const latentUncertainty = document.querySelector('#latent-uncertainty');
 const latentCanvas = document.querySelector('#latent-chart');
 const latentContext = latentCanvas.getContext('2d');
 const latentSliders = document.querySelector('#latent-sliders');
@@ -100,6 +102,7 @@ function connect() {
       frameCount += 1;
       frameCounter.textContent = `${frameCount} FRAMES`;
       if (Array.isArray(message.latent)) updateLatent(message.latent);
+      if (message.uncertainty) updateUncertainty(message.uncertainty);
       if (message.reference_image) showReferenceFrame(message.reference_image);
       const now = performance.now();
       if (previousFrameTime > 0) {
@@ -156,6 +159,8 @@ function resetDream() {
   if (!seedEpisodes.length) return;
   hasReset = false;
   recordButton.disabled = true;
+  mixtureUncertainty.textContent = '—';
+  latentUncertainty.textContent = '—';
   actionPending = true;
   modelState.textContent = 'Resetting';
   placeholder.querySelector('span').textContent = 'Loading a real seed frame';
@@ -337,6 +342,15 @@ function updateLatent(values) {
     slider.value = currentLatent[index] ?? 0;
     slider.previousElementSibling.querySelector('output').value = Number(currentLatent[index] ?? 0).toFixed(2);
   });
+}
+
+function updateUncertainty(values) {
+  const entropy = Number(values.mixture_entropy);
+  const spread = Number(values.mean_predictive_std);
+  if (Number.isFinite(entropy)) {
+    mixtureUncertainty.textContent = `${(Math.max(0, Math.min(1, entropy)) * 100).toFixed(0)}`;
+  }
+  if (Number.isFinite(spread)) latentUncertainty.textContent = spread.toFixed(3);
 }
 
 function createLatentSliders() {

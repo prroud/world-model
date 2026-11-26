@@ -199,6 +199,30 @@ class WorldEngine:
             )
             return self._decode(self._latent)
 
+    def step_with_uncertainty(
+        self, action: np.ndarray | list[float] | tuple[float, ...]
+    ) -> tuple[np.ndarray, dict[str, float]]:
+        """Advance one step and return image plus MDN predictive uncertainty."""
+        if self._latent is None or self._hidden is None:
+            raise RuntimeError("Call reset() before step_with_uncertainty()")
+        action_array = np.asarray(action, dtype=np.float32)
+        if action_array.shape != (3,) or not np.isfinite(action_array).all():
+            raise ValueError("action must contain three finite values")
+        action_array = np.clip(action_array, [-1.0, 0.0, 0.0], [1.0, 1.0, 1.0])
+        action_tensor = torch.as_tensor(
+            action_array, dtype=torch.float32, device=self.device
+        ).unsqueeze(0)
+        with torch.inference_mode():
+            self._latent, self._hidden, uncertainty = self.dynamics.step_with_uncertainty(
+                self._latent,
+                action_tensor,
+                self._hidden,
+                temperature=self._temperature,
+            )
+            frame = self._decode(self._latent)
+            metrics = {name: float(value.item()) for name, value in uncertainty.items()}
+        return frame, metrics
+
     def _decode(self, latent: torch.Tensor) -> np.ndarray:
         with torch.inference_mode():
             image = self.vae.decode(latent)[0].permute(1, 2, 0).cpu().numpy()

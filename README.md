@@ -212,7 +212,9 @@ Connect to `ws://127.0.0.1:8000/ws/dream`. Send JSON messages with type
 a Gymnasium reference environment, or `enabled: false` to stop it. The same
 actions are then sent to both systems. Frame responses contain a Base64 PNG in
 `image`, the current 32-value `latent`, and the active `temperature`; while
-comparison is enabled, they also contain a `reference_image`. The reference
+comparison is enabled, they also contain a `reference_image`. Action frame
+responses include `uncertainty.mixture_entropy` (normalized to 0–1) and
+`uncertainty.mean_predictive_std` (mean latent standard deviation). The reference
 environment starts independently, so this mode compares reactions to input
 rather than matching identical physical states. Send `latent` with a 32-value
 `values` array to replace the current latent vector while retaining recurrent
@@ -236,3 +238,5 @@ changes, latent edits, resets, and comparison toggles. This captures the control
 sequence for review; stochastic sampling means it does not guarantee an
 identical pixel-for-pixel replay. Recording uses the browser's MediaRecorder API
 and does not include audio or the Gymnasium comparison view.
+The telemetry panel shows normalized MDN mixture entropy and mean predicted
+latent standard deviation as indicators of uncertainty in the next state.

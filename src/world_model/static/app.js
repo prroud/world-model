@@ -39,6 +39,8 @@ let seedEpisodes = [];
 let mediaRecorder;
 let recordingStream;
 let recordedChunks = [];
+let recordingSession;
+let recordingStartedAt = 0;
 const recordingSupported = typeof MediaRecorder !== 'undefined'
   && typeof recordCanvas.captureStream === 'function';
 
@@ -153,6 +155,12 @@ function resetDream() {
   modelState.textContent = 'Resetting';
   placeholder.querySelector('span').textContent = 'Loading a real seed frame';
   placeholder.classList.remove('hidden');
+  if (mediaRecorder?.state === 'recording') {
+    recordSessionEvent('reset', {
+      episode_index: Number(seedEpisodeSelect.value),
+      frame_index: Number(seedFrameSlider.value),
+    });
+  }
   send({
     type: 'reset',
     episode_index: Number(seedEpisodeSelect.value),
@@ -221,20 +229,38 @@ function startRecording() {
       : new MediaRecorder(recordingStream);
     mediaRecorder = recorder;
     recordedChunks = [];
+    const startedAt = new Date();
+    recordingStartedAt = performance.now();
+    recordingSession = {
+      schema_version: 1,
+      started_at: startedAt.toISOString(),
+      browser: navigator.userAgent,
+      video: { format: 'webm', capture_fps: 20, view: 'world_model_only', audio: false },
+      action_format: ['steering', 'gas', 'brake'],
+      initial_temperature: Number(temperatureSlider.value),
+      start_seed: {
+        episode_index: Number(seedEpisodeSelect.value),
+        frame_index: Number(seedFrameSlider.value),
+      },
+      events: [],
+    };
+    recordSessionEvent('recording_started');
     recorder.addEventListener('dataavailable', (event) => {
       if (event.data.size > 0) recordedChunks.push(event.data);
     });
     recorder.addEventListener('stop', () => {
       const blob = new Blob(recordedChunks, { type: recorder.mimeType || 'video/webm' });
       if (blob.size > 0) {
+        const filename = `world-model-dream-${startedAt.toISOString().replace(/[:.]/g, '-')}`;
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `world-model-dream-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+        link.download = `${filename}.webm`;
         document.body.append(link);
         link.click();
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadJson(`${filename}.json`, recordingSession);
         modelState.textContent = 'Recording saved';
       } else {
         modelState.textContent = 'Recording empty';
@@ -242,6 +268,7 @@ function startRecording() {
       recordingStream?.getTracks().forEach((track) => track.stop());
       recordingStream = undefined;
       recordedChunks = [];
+      recordingSession = undefined;
       recordButton.classList.remove('recording');
       recordButton.setAttribute('aria-pressed', 'false');
       recordButton.innerHTML = '<span class="record-indicator" aria-hidden="true"></span> Record session';
@@ -257,6 +284,7 @@ function startRecording() {
     console.error('Could not start browser recording:', error);
     recordingStream?.getTracks().forEach((track) => track.stop());
     recordingStream = undefined;
+    recordingSession = undefined;
   }
 }
 
@@ -264,8 +292,30 @@ function stopRecording() {
   if (mediaRecorder?.state === 'recording') {
     recordButton.disabled = true;
     modelState.textContent = 'Saving recording';
+    recordSessionEvent('recording_stopped');
     mediaRecorder.stop();
   }
+}
+
+function recordSessionEvent(type, values = {}) {
+  if (!recordingSession) return;
+  recordingSession.events.push({
+    time_ms: Math.round(performance.now() - recordingStartedAt),
+    type,
+    ...values,
+  });
+}
+
+function downloadJson(filename, value) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function toggleRecording() {
@@ -307,6 +357,7 @@ function createLatentSliders() {
       drawLatent(currentLatent);
       clearTimeout(latentEditTimer);
       latentEditTimer = setTimeout(() => {
+        recordSessionEvent('latent_edit', { values: [...currentLatent] });
         send({ type: 'latent', values: currentLatent });
       }, 80);
     });
@@ -319,6 +370,7 @@ function createLatentSliders() {
 function toggleComparison() {
   if (socket?.readyState !== WebSocket.OPEN) return;
   compareButton.disabled = true;
+  recordSessionEvent('comparison', { enabled: !comparisonEnabled });
   send({ type: 'compare', enabled: !comparisonEnabled });
 }
 
@@ -379,6 +431,7 @@ window.addEventListener('blur', () => heldKeys.clear());
 
 temperatureSlider.addEventListener('input', () => {
   temperatureValue.textContent = Number(temperatureSlider.value).toFixed(2);
+  recordSessionEvent('temperature', { value: Number(temperatureSlider.value) });
   send({ type: 'temperature', value: Number(temperatureSlider.value) });
 });
 resetButton.addEventListener('click', resetDream);
@@ -400,6 +453,7 @@ setInterval(() => {
   const action = currentAction();
   updateInputLabel(action);
   actionPending = true;
+  recordSessionEvent('action', { action });
   send({ type: 'action', action, temperature: Number(temperatureSlider.value) });
 }, 50);
 

@@ -227,5 +227,9 @@ frame while both receive the same controls. Expand `Edit latent dimensions` to
 override the 32 latent values; this keeps the current LSTM memory, so it changes
 the current representation without resetting all sequence context. Use
 `Record session` to capture the generated World Model view as a local WebM clip
-with temperature, input, and FPS overlays. Recording uses the browser's
-MediaRecorder API and does not include audio or the Gymnasium comparison view.
+with temperature, input, and FPS overlays. A matching JSON sidecar records the
+starting episode/frame and a timestamped sequence of actions, temperature
+changes, latent edits, resets, and comparison toggles. This captures the control
+sequence for review; stochastic sampling means it does not guarantee an
+identical pixel-for-pixel replay. Recording uses the browser's MediaRecorder API
+and does not include audio or the Gymnasium comparison view.

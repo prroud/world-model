@@ -20,6 +20,9 @@ const latentContext = latentCanvas.getContext('2d');
 const latentSliders = document.querySelector('#latent-sliders');
 const recordCanvas = document.querySelector('#record-canvas');
 const recordContext = recordCanvas.getContext('2d');
+const seedEpisodeSelect = document.querySelector('#seed-episode');
+const seedFrameSlider = document.querySelector('#seed-frame');
+const seedFrameValue = document.querySelector('#seed-frame-value');
 
 const heldKeys = new Set();
 let socket;
@@ -32,6 +35,7 @@ let currentLatent = [];
 let comparisonEnabled = false;
 let lastLatentEditAt = 0;
 let latentEditTimer;
+let seedEpisodes = [];
 let mediaRecorder;
 let recordingStream;
 let recordedChunks = [];
@@ -57,11 +61,29 @@ function connect() {
   socket.addEventListener('open', () => {
     setConnection('connected', 'Connected');
     modelState.textContent = 'Ready';
-    send({ type: 'reset' });
+    send({ type: 'seed_options' });
   });
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
-    if (message.type === 'frame') {
+    if (message.type === 'seed_options') {
+      seedEpisodes = message.episodes || [];
+      seedEpisodeSelect.replaceChildren();
+      seedEpisodes.forEach((episode) => {
+        const option = document.createElement('option');
+        option.value = episode.episode_index;
+        option.textContent = `Episode ${episode.episode_index + 1} · ${episode.frame_count} frames`;
+        seedEpisodeSelect.append(option);
+      });
+      seedEpisodeSelect.disabled = seedEpisodes.length === 0;
+      seedFrameSlider.disabled = seedEpisodes.length === 0;
+      if (seedEpisodes.length) {
+        seedEpisodeSelect.value = String(seedEpisodes[0].episode_index);
+        updateSeedFrameRange(Math.floor(seedEpisodes[0].frame_count / 2));
+        resetDream();
+      } else {
+        modelState.textContent = 'No seed episodes';
+      }
+    } else if (message.type === 'frame') {
       frameElement.src = `data:image/png;base64,${message.image}`;
       frameElement.classList.add('visible');
       placeholder.classList.add('hidden');
@@ -124,13 +146,27 @@ function send(message) {
 
 function resetDream() {
   if (socket?.readyState !== WebSocket.OPEN) return;
+  if (!seedEpisodes.length) return;
   hasReset = false;
   recordButton.disabled = true;
   actionPending = true;
   modelState.textContent = 'Resetting';
   placeholder.querySelector('span').textContent = 'Loading a real seed frame';
   placeholder.classList.remove('hidden');
-  send({ type: 'reset' });
+  send({
+    type: 'reset',
+    episode_index: Number(seedEpisodeSelect.value),
+    frame_index: Number(seedFrameSlider.value),
+  });
+}
+
+function updateSeedFrameRange(preferredFrame = 0) {
+  const selectedIndex = Number(seedEpisodeSelect.value);
+  const episode = seedEpisodes.find((item) => item.episode_index === selectedIndex);
+  if (!episode) return;
+  seedFrameSlider.max = Math.max(0, episode.frame_count - 1);
+  seedFrameSlider.value = Math.min(preferredFrame, Number(seedFrameSlider.max));
+  seedFrameValue.value = `${Number(seedFrameSlider.value) + 1} / ${episode.frame_count}`;
 }
 
 function showReferenceFrame(image) {
@@ -346,6 +382,16 @@ temperatureSlider.addEventListener('input', () => {
   send({ type: 'temperature', value: Number(temperatureSlider.value) });
 });
 resetButton.addEventListener('click', resetDream);
+seedEpisodeSelect.addEventListener('change', () => {
+  const selected = seedEpisodes.find((item) => item.episode_index === Number(seedEpisodeSelect.value));
+  updateSeedFrameRange(selected ? Math.floor(selected.frame_count / 2) : 0);
+  resetDream();
+});
+seedFrameSlider.addEventListener('input', () => {
+  const episode = seedEpisodes.find((item) => item.episode_index === Number(seedEpisodeSelect.value));
+  if (episode) seedFrameValue.value = `${Number(seedFrameSlider.value) + 1} / ${episode.frame_count}`;
+});
+seedFrameSlider.addEventListener('change', resetDream);
 compareButton.addEventListener('click', toggleComparison);
 recordButton.addEventListener('click', toggleRecording);
 

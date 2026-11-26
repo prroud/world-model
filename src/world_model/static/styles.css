@@ -72,6 +72,11 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 13px; heigh
 input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .slider-scale, .chart-scale { display: flex; justify-content: space-between; color: #77808a; font: 8px var(--mono); }
 .help-text { margin: 13px 0 0; color: #77808a; font-size: 9px; line-height: 1.6; }
+.seed-controls { display: grid; gap: 7px; margin-top: 17px; padding-top: 12px; border-top: 1px solid #292f36; color: #aab1b9; font-size: 9px; }
+.seed-controls select { width: 100%; padding: 7px 8px; border: 1px solid #39414a; border-radius: 4px; background: #101317; color: var(--text); font-size: 9px; }
+.seed-frame-label { display: flex; justify-content: space-between; margin-top: 4px; }
+.seed-frame-label output { color: var(--accent); font: 9px var(--mono); }
+.seed-controls input[type="range"] { margin: 2px 0 3px; }
 .telemetry .panel-title { margin-bottom: 12px; }
 .metric-row { min-height: 32px; border-top: 1px solid #262c32; }
 .metric-row strong { color: var(--text); font: 11px var(--mono); }

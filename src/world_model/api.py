@@ -98,6 +98,11 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                             response["reference_image"] = encode_frame(
                                 resize_reference(observation)
                             )
+                    elif message_type == "seed_options":
+                        response = {
+                            "type": "seed_options",
+                            "episodes": await run_in_threadpool(engine.seed_options),
+                        }
                     elif message_type == "action":
                         if "temperature" in message:
                             engine.set_temperature(float(message["temperature"]))
@@ -159,7 +164,7 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
                         }
                     else:
                         raise ValueError(
-                            "type must be reset, action, temperature, compare, or latent"
+                            "type must be seed_options, reset, action, temperature, compare, or latent"
                         )
                     await websocket.send_json(response)
                 except Exception as exc:

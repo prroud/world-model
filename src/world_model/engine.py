@@ -107,6 +107,21 @@ class WorldEngine:
             raise ValueError("temperature must be a finite nonnegative number")
         self._temperature = float(temperature)
 
+    def seed_options(self) -> list[dict[str, int | str]]:
+        """Describe available encoded episodes for deterministic reset selection."""
+        options = []
+        for episode_index, path in enumerate(self._seed_files):
+            with np.load(path) as episode:
+                frame_count = len(episode["latents"])
+            options.append(
+                {
+                    "episode_index": episode_index,
+                    "frame_count": frame_count,
+                    "label": path.stem,
+                }
+            )
+        return options
+
     def set_latent(self, values: np.ndarray | list[float] | tuple[float, ...]) -> np.ndarray:
         """Replace the current latent vector and return its decoded image.
 

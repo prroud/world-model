@@ -23,6 +23,11 @@ const recordContext = recordCanvas.getContext('2d');
 const seedEpisodeSelect = document.querySelector('#seed-episode');
 const seedFrameSlider = document.querySelector('#seed-frame');
 const seedFrameValue = document.querySelector('#seed-frame-value');
+const vaeBestMetric = document.querySelector('#vae-best-metric');
+const mdnBestMetric = document.querySelector('#mdn-best-metric');
+const benchmarkFps = document.querySelector('#benchmark-fps');
+const rolloutMae = document.querySelector('#rollout-mae');
+const evaluationStatus = document.querySelector('#evaluation-status');
 
 const heldKeys = new Set();
 let socket;
@@ -415,6 +420,84 @@ function drawLatent(values) {
   });
 }
 
+function drawMetricChart(canvas, values, color) {
+  const context = canvas.getContext('2d');
+  const { width, height } = canvas;
+  context.clearRect(0, 0, width, height);
+  context.strokeStyle = '#343b43';
+  context.lineWidth = 1;
+  for (let line = 1; line <= 3; line += 1) {
+    const y = (height * line) / 4;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(width, y);
+    context.stroke();
+  }
+  if (!values.length) return false;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
+    const y = height - 5 - ((value - min) / span) * (height - 10);
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+  context.stroke();
+  return true;
+}
+
+async function loadEvaluationMetrics() {
+  try {
+    const response = await fetch('/metrics');
+    if (!response.ok) throw new Error(`Metrics request failed (${response.status})`);
+    const metrics = await response.json();
+    const vaeRows = metrics.vae_history || [];
+    const mdnRows = metrics.mdn_history || [];
+    const vaeValues = vaeRows
+      .filter((row) => row.validation_reconstruction != null)
+      .map((row) => Number(row.validation_reconstruction)).filter(Number.isFinite);
+    const mdnValues = mdnRows
+      .filter((row) => row.validation_nll != null)
+      .map((row) => Number(row.validation_nll)).filter(Number.isFinite);
+    if (vaeValues.length) vaeBestMetric.textContent = Math.min(...vaeValues).toFixed(2);
+    if (mdnValues.length) mdnBestMetric.textContent = Math.min(...mdnValues).toFixed(2);
+    const vaeDrawn = drawMetricChart(document.querySelector('#vae-history-chart'), vaeValues, '#c8f169');
+    const mdnDrawn = drawMetricChart(document.querySelector('#mdn-history-chart'), mdnValues, '#86afd0');
+    if (metrics.benchmark?.frames_per_second != null) {
+      benchmarkFps.textContent = Number(metrics.benchmark.frames_per_second).toFixed(1);
+    }
+    const rolloutRows = metrics.rollout_summary || [];
+    const rolloutValues = rolloutRows
+      .filter((row) => row.mean_mae_0_255 != null)
+      .map((row) => Number(row.mean_mae_0_255)).filter(Number.isFinite);
+    if (rolloutValues.length) rolloutMae.textContent = `${(rolloutValues.reduce((sum, value) => sum + value, 0) / rolloutValues.length).toFixed(2)} / 255`;
+    const rolloutByHorizon = new Map();
+    rolloutRows.forEach((row) => {
+      if (row.horizon == null || row.mean_mae_0_255 == null) return;
+      const horizon = Number(row.horizon);
+      const value = Number(row.mean_mae_0_255);
+      if (!Number.isFinite(horizon) || !Number.isFinite(value)) return;
+      const values = rolloutByHorizon.get(horizon) || [];
+      values.push(value);
+      rolloutByHorizon.set(horizon, values);
+    });
+    const rolloutByHorizonValues = [...rolloutByHorizon.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, values]) => values.reduce((sum, value) => sum + value, 0) / values.length);
+    const rolloutDrawn = drawMetricChart(document.querySelector('#rollout-chart'), rolloutByHorizonValues, '#e6a86f');
+    const available = [vaeDrawn, mdnDrawn, metrics.benchmark != null, rolloutDrawn].filter(Boolean).length;
+    evaluationStatus.textContent = available
+      ? `${available} saved evaluation source(s) loaded. Missing metrics appear as — until their report is generated.`
+      : 'No saved evaluation reports yet. Train models, run the benchmark, and evaluate a rollout.';
+  } catch (error) {
+    evaluationStatus.textContent = `Could not load evaluation metrics: ${error.message}`;
+  }
+}
+
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'range') return;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
@@ -459,4 +542,5 @@ setInterval(() => {
 
 drawLatent(currentLatent);
 createLatentSliders();
+loadEvaluationMetrics();
 connect();

@@ -96,6 +96,23 @@
               <div id="latent-sliders" class="latent-sliders"></div>
             </details>
           </section>
+
+          <section class="panel evaluation-panel">
+            <div class="panel-title"><span class="panel-index">04</span><h2>Model evaluation</h2></div>
+            <div class="evaluation-metrics">
+              <div><span>Best VAE val. recon.</span><strong id="vae-best-metric">—</strong></div>
+              <div><span>Best MDN val. NLL</span><strong id="mdn-best-metric">—</strong></div>
+              <div><span>Benchmark</span><strong><span id="benchmark-fps">—</span><small> FPS</small></strong></div>
+              <div><span>Rollout MAE</span><strong id="rollout-mae">—</strong></div>
+            </div>
+            <div class="evaluation-chart-title">VAE validation reconstruction</div>
+            <canvas id="vae-history-chart" class="evaluation-chart" width="480" height="100" aria-label="VAE validation reconstruction loss by epoch"></canvas>
+            <div class="evaluation-chart-title">MDN-RNN validation negative log likelihood</div>
+            <canvas id="mdn-history-chart" class="evaluation-chart" width="480" height="100" aria-label="MDN-RNN validation loss by epoch"></canvas>
+            <div class="evaluation-chart-title">Rollout pixel MAE by horizon</div>
+            <canvas id="rollout-chart" class="evaluation-chart" width="480" height="100" aria-label="Mean rollout pixel error by prediction horizon"></canvas>
+            <div id="evaluation-status" class="evaluation-status">Loading saved metrics…</div>
+          </section>
         </aside>
       </section>
 

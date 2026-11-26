@@ -95,6 +95,15 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 2px s
 .latent-control label { display: flex; justify-content: space-between; color: #86909a; font: 8px var(--mono); }
 .latent-control output { color: var(--accent); }
 .latent-control input[type="range"] { height: 2px; margin: 9px 0 4px; }
+.evaluation-panel { min-width: 0; }
+.evaluation-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.evaluation-metrics > div { display: grid; gap: 5px; padding: 9px; border: 1px solid #292f36; border-radius: 4px; }
+.evaluation-metrics span { color: #818b95; font-size: 8px; }
+.evaluation-metrics strong { color: var(--accent); font: 11px var(--mono); }
+.evaluation-metrics strong small { color: var(--muted); font-size: 8px; }
+.evaluation-chart-title { margin: 14px 0 4px; color: #aab3bb; font-size: 8px; }
+.evaluation-chart { display: block; width: 100%; height: 52px; }
+.evaluation-status { margin-top: 8px; color: #717b85; font-size: 8px; line-height: 1.5; }
 .page-footer { display: flex; justify-content: space-between; gap: 12px; padding: 19px 0 25px; color: #626c76; font-size: 8px; }
 .record-canvas { position: fixed; top: 0; left: -10000px; width: 640px; height: 426px; pointer-events: none; }
 

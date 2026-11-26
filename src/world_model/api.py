@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import io
 import json
 from collections.abc import Callable
@@ -20,6 +21,27 @@ from world_model.engine import WorldEngine
 
 
 EngineFactory = Callable[[], WorldEngine]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def read_metric_rows(path: Path) -> list[dict[str, object]]:
+    """Load a fixed project metrics CSV, converting numeric fields where possible."""
+    if not path.is_file():
+        return []
+    with path.open(newline="", encoding="utf-8") as metrics_file:
+        rows = []
+        for row in csv.DictReader(metrics_file):
+            converted: dict[str, object] = {}
+            for key, value in row.items():
+                if value is None or value == "":
+                    converted[key] = None
+                    continue
+                try:
+                    converted[key] = float(value)
+                except ValueError:
+                    converted[key] = value
+            rows.append(converted)
+    return rows
 
 
 def encode_frame(frame: np.ndarray) -> str:
@@ -57,6 +79,21 @@ def create_app(engine_factory: EngineFactory = WorldEngine) -> FastAPI:
         readiness = WorldEngine.readiness()
         status_code = 200 if readiness["status"] == "ready" else 503
         return JSONResponse(readiness, status_code=status_code)
+
+    @app.get("/metrics")
+    async def metrics() -> dict[str, object]:
+        """Return available training, rollout, and inference reports."""
+        benchmark_path = PROJECT_ROOT / "artifacts/benchmark.json"
+        try:
+            benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            benchmark = None
+        return {
+            "vae_history": read_metric_rows(PROJECT_ROOT / "artifacts/vae/history.csv"),
+            "mdn_history": read_metric_rows(PROJECT_ROOT / "artifacts/mdn_rnn/history.csv"),
+            "rollout_summary": read_metric_rows(PROJECT_ROOT / "artifacts/rollout/summary.csv"),
+            "benchmark": benchmark,
+        }
 
     @app.websocket("/ws/dream")
     async def dream_socket(websocket: WebSocket) -> None:

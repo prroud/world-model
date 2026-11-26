@@ -173,6 +173,9 @@ python scripts/benchmark_engine.py --steps 500 --json-out artifacts/benchmark.js
 
 The benchmark includes recurrent prediction, VAE decoding, and conversion to an
 RGB image. It reports mean, median, p95, and p99 latency plus average FPS.
+The browser's `Model evaluation` panel reads these saved results together with
+training histories and rollout summaries from the `artifacts/` directory. Run
+`scripts/evaluate_rollout.py` to populate the rollout error chart.
 
 Inspect open-loop quality against a recorded episode with:
 

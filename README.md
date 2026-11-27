@@ -1,158 +1,86 @@
 # World Model Demo
 
-A world model demonstrator for Gymnasium's `CarRacing-v3` environment. The goal
-is to generate short, interactive image sequences from user controls using a VAE
-and a recurrent MDN-RNN dynamics model.
+An interactive world model demonstrator based on Gymnasium's `CarRacing-v3`. A variational autoencoder (VAE) compresses 64×64 RGB observations into 32-dimensional latent vectors. An MDN-RNN predicts future latent states from the previous state and continuous steering, gas, and brake inputs. The browser demo decodes those predictions into frames.
 
-## Initial scope
+This is an experimental learned simulation. It can drift from the real environment, especially over long open-loop rollouts. The optional Gymnasium comparison is diagnostic: it applies the same controls to both environments, but does not synchronize their physical states.
 
-- collect 64×64 frames with actions and episode boundaries,
-- train a VAE that encodes frames into 32-dimensional latent vectors,
-- train an MDN-RNN to predict the next latent state,
-- provide a simple web demo with controls, reset, and temperature adjustment,
-- compare against Gymnasium diagnostically and measure inference performance.
+## Quick start with trained assets
 
-Manual latent-space editing and long, stable sequences are outside the scope of
-the minimum viable demo.
-
-## VAE model
-
-The convolutional VAE implementation is in `src/world_model/vae.py`. It accepts
-normalized RGB tensors in NCHW layout with shape `B×3×64×64`, and returns a
-reconstruction plus the latent Gaussian mean and log variance. Use
-`sample=False` to decode the posterior mean deterministically.
-
-## MDN-RNN model
-
-The recurrent dynamics model is in `src/world_model/mdn_rnn.py`. It consumes
-batch-first latent and action sequences, maintains the LSTM hidden and cell
-states, and predicts a five-component Gaussian mixture for the next latent
-vector. `step()` advances a single frame; its temperature parameter controls
-mixture selection and sampling variance, with temperature zero selecting the
-most likely component mean.
-
-## Requirements
-
-- Python 3.10 or newer
-- Install project dependencies with `pip install -e .`
-Install the test extra and run the unit suite with:
+Use Python 3.10 or newer. From the repository root, install the project and start the web app:
 
 ```powershell
-python -m pip install -e ".[test]"
-python -m pytest
+python -m pip install -e .
+uvicorn world_model.api:app --app-dir src --host 127.0.0.1 --port 8000
 ```
 
-GitHub Actions runs this suite on Python 3.10 and 3.12 for pushes and pull
-requests. Tests use synthetic inputs and do not require collected episodes or
-trained checkpoints.
+Open <http://127.0.0.1:8000/>. This requires the trained VAE and MDN-RNN checkpoints plus encoded latent seed episodes at the default paths below. The `/health` endpoint reports whether those files are present.
 
-## Building and running the demo
+Use the arrow keys or WASD to drive. The page provides temperature control, latent-state inspection and editing, selectable reset seeds, uncertainty telemetry, and an optional side-by-side Gymnasium comparison. `Record session` saves a browser WebM recording and a JSON control log; stochastic sampling means the log is not a pixel-identical replay.
 
-For a fresh end-to-end run, use:
+## Full pipeline
+
+Install the project dependencies once:
 
 ```powershell
-python scripts/run_demo.py
+python -m pip install -e .
 ```
 
-The launcher collects trajectories, audits and previews the dataset, trains
-both models, encodes latent episodes, and starts the web server. It defaults to
-20 episodes and the standard training epoch counts, so the first run can take
-a while. Set `--episodes`, `--vae-epochs`, `--rnn-epochs`, or `--device` to tune
-the run; `--render` shows the environment during collection. Use `--host` and
-`--port` to choose where the web server listens. The launcher stops before
-writing if its expected output artifacts already exist, so move those files
-aside before starting a new full build.
-
-## Project layout
-
-Package code lives in `src/world_model/`, with runnable scripts in `scripts/`.
-Datasets and trained weights are not stored in the repository.
-
-## Collecting trajectories
-
-Run the collector from the repository root:
+Then collect episodes, validate the dataset, train both models, encode latent sequences, and start the app:
 
 ```powershell
+python scripts/run_demo.py --episodes 20 --vae-epochs 20 --rnn-epochs 30
+```
+
+The first run can take a while, particularly on CPU. The launcher refuses to overwrite its expected dataset and model outputs. Choose a clean workspace or move existing outputs before starting another full build. Use `--device cuda` when a supported CUDA setup is available, `--render` to show collection, or `--host` and `--port` to change the server address.
+
+### Run stages separately
+
+Each command below runs from the repository root. These are also useful when you want to inspect or repeat a single stage.
+
+```powershell
+# Collect episodes as compressed NumPy archives
 python scripts/collect_data.py --episodes 20 --output data/carracing
-```
 
-The collector writes one compressed `.npz` file per episode. Each file contains
-`observations` (`uint8`, shape `T×64×64×3`), `actions` (`float32`, shape
-`T×3`), `rewards` (`float32`, shape `T`), `dones` (`bool`, shape `T`), and
-environment and reproducibility metadata, including the episode index and RNG
-seed. Each episode's environment and action sampler use that seed, so the
-trajectory can be regenerated independently with the same code and dependency
-versions. The final `dones` entry marks the episode boundary.
-The output directory must not already contain files named `episode_*.npz`.
-
-Use `--render` to display the environment while collecting. This is slower, but
-useful for visually checking the exploratory driving behavior.
-
-Audit the saved episodes before training:
-
-```powershell
+# Check shapes, ranges, episode boundaries, and image samples
 python scripts/validate_dataset.py --data data/carracing --json-out artifacts/data-audit.json --preview-out artifacts/data-preview.png
-```
 
-The audit checks array shapes and types, aligned sequence lengths, action bounds,
-and episode boundaries. Its JSON report includes min/max/mean/standard deviation
-for each action component, both per episode and across the dataset. It also
-summarizes episode lengths and total returns across the dataset and reports each
-episode's return and mean step reward. The optional preview contact sheet
-samples frames evenly from each episode for a quick visual check. Fully black
-or repeated adjacent frames are reported as warnings for review; structural and
-value errors produce a nonzero exit status.
-
-## Training the VAE
-
-Train on the collected episode files with:
-
-```powershell
+# Train the image encoder and decoder; save the best checkpoint and history
 python scripts/train_vae.py --data data/carracing --epochs 20
-```
 
-The trainer keeps one episode in memory at a time, reserves complete episodes
-for validation, and writes the best checkpoint to `artifacts/vae/vae.pt`. It
-also writes `reconstructions.png`, with each original frame next to its
-deterministic reconstruction, for visual inspection. Use `--device cpu` or
-`--device cuda` to choose the compute device explicitly. Per-epoch training and
-validation loss components are recorded in `artifacts/vae/history.csv`. The
-default KL weight is `0.01` with a five-epoch linear warmup to reduce posterior
-collapse on the summed pixel reconstruction objective. The reconstruction
-loss also raises pixel weights for colors that differ from each frame's median
-background color, helping retain the small track and car details. Tune this
-with `--foreground-weight`; override the KL settings with `--beta` and
-`--kl-warmup-epochs` if needed.
-
-## Encoding latent sequences
-
-After training the VAE, encode the dataset using its posterior means:
-
-```powershell
+# Encode each episode using the VAE posterior mean
 python scripts/encode_latents.py --data data/carracing --checkpoint artifacts/vae/vae.pt --output data/latents
-```
 
-This deterministic encoding step writes one file per source episode, preserving
-the matching actions and episode-boundary flags for recurrent-model training.
-
-## Training the MDN-RNN
-
-Train the recurrent dynamics model on those latent episodes:
-
-```powershell
+# Train the recurrent dynamics model
 python scripts/train_mdn_rnn.py --data data/latents --epochs 30
 ```
 
-Training uses non-overlapping 64-step windows within each episode, so no
-sequence crosses an episode boundary. The best checkpoint is written to
-`artifacts/mdn_rnn/mdn_rnn.pt`, and per-epoch negative log likelihood values are
-stored in `history.csv`.
+Collection writes one `episode_*.npz` file per episode with observations, actions, rewards, done flags, and seed metadata. The dataset validator reports errors and warnings and writes a contact sheet for visual inspection. Training reserves complete episodes for validation; the VAE writes reconstruction examples and both trainers save per-epoch CSV histories.
 
-## Running the world engine
+## Evaluate and report
 
-`src/world_model/engine.py` combines the trained checkpoints for inference. It
-uses an encoded episode as a reset seed, then generates frames from actions
-without stepping Gymnasium:
+Evaluate open-loop predictions on held-out recorded actions. For example, compare three episodes at several horizons:
+
+```powershell
+python scripts/evaluate_rollout.py --episode-indices 0,1,2 --horizons 25,50,100 --temperature 0
+```
+
+The rollout evaluation saves real-versus-generated contact sheets, per-step pixel-error CSVs, and `artifacts/rollout/summary.csv`. Measure inference throughput separately:
+
+```powershell
+python scripts/benchmark_engine.py --steps 500 --json-out artifacts/benchmark.json
+```
+
+Generate a Markdown report, a machine-readable JSON summary, and SVG charts from whichever pipeline results are available:
+
+```powershell
+python scripts/generate_report.py
+```
+
+The report is written to `artifacts/report/report.md`; `summary.json` and any available charts are saved alongside it. It does not retrain models, and missing inputs are called out in the report. By default it reads `artifacts/data-audit.json`, model histories, the rollout summary, and the benchmark. Use `--artifacts-dir` to read another artifact directory or `--output-dir` to choose a different report destination.
+
+## Model and engine interface
+
+The VAE implementation is in `src/world_model/vae.py`; the MDN-RNN is in `src/world_model/mdn_rnn.py`. `src/world_model/engine.py` combines their checkpoints for frame-by-frame generation. It starts from an encoded episode seed and then advances without stepping Gymnasium:
 
 ```python
 from world_model.engine import WorldEngine
@@ -160,83 +88,30 @@ from world_model.engine import WorldEngine
 engine = WorldEngine()
 frame = engine.reset(seed=7)
 frame = engine.step([0.0, 0.8, 0.0])  # steering, gas, brake
+engine.set_temperature(0.5)
 ```
 
-`frame` is an RGB `uint8` array of shape `64×64×3`. Call
-`engine.set_temperature(value)` to adjust sampling while the dream is running.
+Each frame is an RGB `uint8` array with shape `(64, 64, 3)`. The API is implemented in `src/world_model/api.py`; its WebSocket endpoint is `/ws/dream`, and the browser assets are in `src/world_model/static/`. The browser's `Model evaluation` panel reads saved training histories, rollout summaries, and benchmark metrics through `/metrics`.
 
-Measure end-to-end frame generation after training the models:
+## Repository layout
+
+```text
+src/world_model/       Models, engine, API, and browser application
+scripts/               Data collection, training, evaluation, and reporting
+tests/                 Unit tests using synthetic inputs
+data/                  Collected episodes and encoded latent sequences (local)
+artifacts/              Checkpoints, metrics, visualizations, and reports (local)
+```
+
+Datasets, model checkpoints, and generated reports are local artifacts and are not tracked in Git.
+
+## Tests and CI
+
+Install the test dependencies and run the unit suite with:
 
 ```powershell
-python scripts/benchmark_engine.py --steps 500 --json-out artifacts/benchmark.json
+python -m pip install -e ".[test]"
+python -m pytest
 ```
 
-The benchmark includes recurrent prediction, VAE decoding, and conversion to an
-RGB image. It reports mean, median, p95, and p99 latency plus average FPS.
-The browser's `Model evaluation` panel reads these saved results together with
-training histories and rollout summaries from the `artifacts/` directory. Run
-`scripts/evaluate_rollout.py` to populate the rollout error chart.
-
-Inspect open-loop quality against a recorded episode with:
-
-```powershell
-python scripts/evaluate_rollout.py --episode-index 0 --horizon 100 --temperature 0
-```
-
-The script feeds recorded actions to the MDN-RNN from recorded latent seeds,
-then writes real-versus-dream contact sheets, per-step pixel MAE files, and a
-summary CSV under `artifacts/rollout/`. To compare multiple held-out episodes
-and horizons in one run, use comma-separated indices and horizons:
-
-```powershell
-python scripts/evaluate_rollout.py --episode-indices 0,1,2 --horizons 25,50,100 --temperature 0
-```
-
-`summary.csv` reports mean error and the first and last ten-step window for
-each episode/horizon pair. Each episode's contact sheet shows the longest
-requested horizon; its per-step CSV contains errors up to that horizon.
-
-## WebSocket API
-
-Run the API after producing both model checkpoints and latent seed episodes:
-
-```powershell
-uvicorn world_model.api:app --app-dir src --host 127.0.0.1 --port 8000
-```
-
-Connect to `ws://127.0.0.1:8000/ws/dream`. Send JSON messages with type
-`seed_options` to list available episode/frame counts, `reset` (optional `seed`,
-`episode_index`, and `frame_index`), `action` (an
-`action` array in steering/gas/brake order, optionally with `temperature`), or
-`temperature` (a numeric `value`). Send `compare` with `enabled: true` to start
-a Gymnasium reference environment, or `enabled: false` to stop it. The same
-actions are then sent to both systems. Frame responses contain a Base64 PNG in
-`image`, the current 32-value `latent`, and the active `temperature`; while
-comparison is enabled, they also contain a `reference_image`. Action frame
-responses include `uncertainty.mixture_entropy` (normalized to 0–1) and
-`uncertainty.mean_predictive_std` (mean latent standard deviation). The reference
-environment starts independently, so this mode compares reactions to input
-rather than matching identical physical states. Send `latent` with a 32-value
-`values` array to replace the current latent vector while retaining recurrent
-memory. The
-`/live` reports that the API process is running. `/health` checks whether the
-default VAE checkpoint, MDN-RNN checkpoint, and at least one encoded seed
-episode are present; it returns HTTP 503 with failed checks until the assets
-are available. This is a file-presence check and does not load or validate the
-checkpoint contents.
-Open `http://127.0.0.1:8000/` for the browser demo. Use the arrow keys or WASD
-to steer, accelerate, and brake; the side panel shows temperature, generated
-frame rate, and a read-only chart of the current latent vector. Use
-`Compare Gymnasium` to display the real environment next to the generated
-frame while both receive the same controls. Expand `Edit latent dimensions` to
-override the 32 latent values; this keeps the current LSTM memory, so it changes
-the current representation without resetting all sequence context. Use
-`Record session` to capture the generated World Model view as a local WebM clip
-with temperature, input, and FPS overlays. A matching JSON sidecar records the
-starting episode/frame and a timestamped sequence of actions, temperature
-changes, latent edits, resets, and comparison toggles. This captures the control
-sequence for review; stochastic sampling means it does not guarantee an
-identical pixel-for-pixel replay. Recording uses the browser's MediaRecorder API
-and does not include audio or the Gymnasium comparison view.
-The telemetry panel shows normalized MDN mixture entropy and mean predicted
-latent standard deviation as indicators of uncertainty in the next state.
+GitHub Actions runs the suite on Python 3.10 and 3.12. The tests use synthetic inputs and do not need collected episodes or trained checkpoints.
